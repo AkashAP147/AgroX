@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { login as loginAPI } from '../services/api';
-import { auth, RecaptchaVerifier, signInWithPhoneNumber } from '../services/firebase';
+import { login as loginAPI, googleLogin } from '../services/api';
+import { auth, RecaptchaVerifier, signInWithPhoneNumber, GoogleAuthProvider, signInWithPopup } from '../services/firebase';
 import { Wheat, Tractor, Store, Truck, Loader2, ShieldCheck, ArrowLeft, KeyRound } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -12,6 +12,25 @@ const ROLE_IDS = [
 ];
 
 export default function Login({ onLogin }) {
+    async function handleGoogleLogin() {
+      setError('');
+      setLoading(true);
+      try {
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        // Call backend to get user and role
+        const res = await googleLogin({ uid: user.uid, email: user.email });
+        onLogin(res.user);
+        if (res.role === 'farmer') navigate('/farmer');
+        else if (res.role === 'retailer') navigate('/marketplace');
+        else navigate('/transporter');
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
   const { t } = useLanguage();
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState('farmer');
@@ -135,6 +154,18 @@ export default function Login({ onLogin }) {
           </p>
         </div>
 
+        {/* Google Login Button */}
+        {step === 'phone' && (
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            className="btn btn-outline w-full text-lg py-3 mb-4 flex items-center justify-center gap-2"
+            disabled={loading}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21.805 10.023h-9.765v3.977h5.588c-.241 1.285-1.03 2.377-2.199 3.093v2.572h3.548c2.078-1.916 3.298-4.74 2.828-7.642z" fill="#4285F4"/><path d="M12.04 21c2.47 0 4.541-.816 6.055-2.211l-3.548-2.572c-.984.661-2.24 1.054-3.507 1.054-2.695 0-4.98-1.818-5.797-4.267h-3.6v2.684c1.505 2.97 4.646 5.312 8.397 5.312z" fill="#34A853"/><path d="M6.243 13.004a5.996 5.996 0 0 1 0-3.008v-2.684h-3.6a9.003 9.003 0 0 0 0 8.376l3.6-2.684z" fill="#FBBC05"/><path d="M12.04 6.399c1.343 0 2.548.462 3.497 1.36l2.617-2.617c-1.514-1.395-3.585-2.142-6.114-2.142-3.751 0-6.892 2.342-8.397 5.312l3.6 2.684c.817-2.449 3.102-4.267 5.797-4.267z" fill="#EA4335"/></svg>
+            Continue with Google
+          </button>
+        )}
         {step === 'phone' ? (
           /* ---- STEP 1: Phone + Role ---- */
           <form onSubmit={handleSendOTP} className="card-static p-6 sm:p-8 space-y-5">

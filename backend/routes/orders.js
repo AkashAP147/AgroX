@@ -11,5 +11,6 @@ router.get('/retailer/:retailerId', getRetailerOrders);
 router.get('/:orderId/details', getOrderDetails);
 router.put('/:orderId/status', updateOrderStatus);
 router.post('/:orderId/pay', payOrder);
+router.post('/:orderId/verify-otp', require('../controllers/orderController').verifyDeliveryOtp);
 
 module.exports = router;

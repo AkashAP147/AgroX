@@ -36,8 +36,10 @@ export default function VoiceCropInput({ user, onCropAdded, className = '', butt
   const [loading, setLoading] = useState(false);
   const [locationDetecting, setLocationDetecting] = useState(false);
   const [message, setMessage] = useState('');
+  const [showImageChoice, setShowImageChoice] = useState(false);
   const recognitionRef = useRef(null);
   const imageInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -124,12 +126,17 @@ export default function VoiceCropInput({ user, onCropAdded, className = '', butt
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
+          // Use Accept-Language header based on selected language
           const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+            { headers: { 'Accept-Language': language } }
           );
           const data = await response.json();
           const placeName = data.address?.city || data.address?.town || data.address?.village || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-          setCropData(prev => ({ ...prev, location: placeName }));
+          // Find language label
+          const langObj = LANGUAGES.find(l => l.code === language);
+          const langLabel = langObj ? langObj.name : language;
+          setCropData(prev => ({ ...prev, location: `${placeName} (${langLabel})` }));
           setMessage('Location detected!');
         } catch {
           setCropData(prev => ({ ...prev, location: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}` }));
@@ -149,6 +156,7 @@ export default function VoiceCropInput({ user, onCropAdded, className = '', butt
       setCropData(prev => ({ ...prev, image: file }));
       setMessage('Image selected!');
     }
+    setShowImageChoice(false);
   }
 
   async function handleAddCrop() {
@@ -360,10 +368,11 @@ export default function VoiceCropInput({ user, onCropAdded, className = '', butt
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Crop Image (Optional)</label>
                     <button
-                      onClick={() => imageInputRef.current?.click()}
+                      type="button"
+                      onClick={() => setShowImageChoice(true)}
                       className="w-full px-4 py-3 rounded-lg border-2 border-dashed border-primary-200 hover:border-primary-500 hover:bg-primary-50 transition-colors flex items-center justify-center gap-2 text-primary-600 font-medium"
                     >
-                      <Upload className="w-4 h-4" /> {cropData.image ? cropData.image.name : 'Upload Image'}
+                      <Upload className="w-4 h-4" /> {cropData.image ? cropData.image.name : 'Click or Select Image'}
                     </button>
                     <input
                       ref={imageInputRef}
@@ -372,6 +381,41 @@ export default function VoiceCropInput({ user, onCropAdded, className = '', butt
                       onChange={handleImageChange}
                       className="hidden"
                     />
+                    <input
+                      ref={cameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleImageChange}
+                      className="hidden"
+                    />
+                    {showImageChoice && (
+                      <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowImageChoice(false)}>
+                        <div className="bg-white rounded-xl shadow-xl p-6 flex flex-col gap-4 min-w-[220px]" onClick={e => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="w-full px-4 py-2 rounded-lg bg-primary-600 text-white font-semibold flex items-center justify-center gap-2 hover:bg-primary-700"
+                            onClick={() => { setShowImageChoice(false); setTimeout(() => cameraInputRef.current?.click(), 100); }}
+                          >
+                            <Upload className="w-4 h-4" /> Take a Photo
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full px-4 py-2 rounded-lg bg-primary-100 text-primary-700 font-semibold flex items-center justify-center gap-2 hover:bg-primary-200"
+                            onClick={() => { setShowImageChoice(false); setTimeout(() => imageInputRef.current?.click(), 100); }}
+                          >
+                            <Upload className="w-4 h-4" /> Upload from Device
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full px-4 py-2 rounded-lg bg-gray-100 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-200"
+                            onClick={() => setShowImageChoice(false)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {message && (

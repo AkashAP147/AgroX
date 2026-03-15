@@ -217,6 +217,12 @@ const translations = {
     paymentMethod: 'Payment Method',
     paymentSuccess: 'Payment Successful!',
     transactionId: 'Transaction ID',
+
+    // Ratings
+    rateFarmer: 'Rate Farmer',
+    yourRating: 'Your Rating',
+    submitRating: 'Submit Rating',
+    ratingSubmitted: 'Rating submitted!',
   },
 
   hi: {
@@ -398,6 +404,10 @@ const translations = {
     paymentMethod: 'भुगतान विधि',
     paymentSuccess: 'भुगतान सफल!',
     transactionId: 'लेनदेन ID',
+    rateFarmer: 'किसान को रेटिंग दें',
+    yourRating: 'आपकी रेटिंग',
+    submitRating: 'रेटिंग दें',
+    ratingSubmitted: 'रेटिंग दर्ज!',
   },
 
   mr: {
@@ -579,6 +589,10 @@ const translations = {
     paymentMethod: 'पेमेंट पद्धत',
     paymentSuccess: 'पेमेंट यशस्वी!',
     transactionId: 'व्यवहार ID',
+    rateFarmer: 'शेतकऱ्याला रेटिंग द्या',
+    yourRating: 'तुमचे रेटिंग',
+    submitRating: 'रेटिंग द्या',
+    ratingSubmitted: 'रेटिंग दिले!',
   },
 
   kn: {
@@ -760,6 +774,10 @@ const translations = {
     paymentMethod: 'ಪಾವತಿ ವಿಧಾನ',
     paymentSuccess: 'ಪಾವತಿ ಯಶಸ್ವಿ!',
     transactionId: 'ವ್ಯವಹಾರ ID',
+    rateFarmer: 'ರೈತನಿಗೆ ರೇಟಿಂಗ್ ನೀಡಿ',
+    yourRating: 'ನಿಮ್ಮ ರೇಟಿಂಗ್',
+    submitRating: 'ರೇಟಿಂಗ್ ಸಲ್ಲಿಸಿ',
+    ratingSubmitted: 'ರೇಟಿಂಗ್ ಸಲ್ಲಿಸಲಾಗಿದೆ!',
   },
 
   te: {
@@ -799,6 +817,10 @@ const translations = {
     sendOTP: 'OTP పంపు',
     confirmOrder: 'ఆర్డర్ నిర్ధారించు',
     payment: 'చెల్లింపు',
+    rateFarmer: 'రైతుకు రేటింగ్ ఇవ్వండి',
+    yourRating: 'మీ రేటింగ్',
+    submitRating: 'రేటింగ్ ఇవ్వండి',
+    ratingSubmitted: 'రేటింగ్ ఇచ్చారు!',
   },
 
   ta: {
@@ -838,6 +860,10 @@ const translations = {
     sendOTP: 'OTP அனுப்பு',
     confirmOrder: 'ஆர்டர் உறுதிப்படுத்து',
     payment: 'பணம் செலுத்துதல்',
+    rateFarmer: 'விவசாயிக்கு மதிப்பீடு',
+    yourRating: 'உங்கள் மதிப்பீடு',
+    submitRating: 'மதிப்பீடு அளிக்கவும்',
+    ratingSubmitted: 'மதிப்பீடு அளிக்கப்பட்டது!',
   },
 
   gu: {
@@ -871,6 +897,10 @@ const translations = {
     sendOTP: 'OTP મોકલો',
     confirmOrder: 'ઓર્ડર પુષ્ટિ કરો',
     payment: 'ચુકવણી',
+    rateFarmer: 'ખેડૂતને રેટિંગ આપો',
+    yourRating: 'તમારું રેટિંગ',
+    submitRating: 'રેટિંગ આપો',
+    ratingSubmitted: 'રેટિંગ આપ્યું!',
   },
 
   pa: {
@@ -904,6 +934,10 @@ const translations = {
     sendOTP: 'OTP ਭੇਜੋ',
     confirmOrder: 'ਆਰਡਰ ਪੁਸ਼ਟੀ ਕਰੋ',
     payment: 'ਭੁਗਤਾਨ',
+    rateFarmer: 'ਕਿਸਾਨ ਨੂੰ ਰੇਟਿੰਗ ਦਿਓ',
+    yourRating: 'ਤੁਹਾਡੀ ਰੇਟਿੰਗ',
+    submitRating: 'ਰੇਟਿੰਗ ਦਿਓ',
+    ratingSubmitted: 'ਰੇਟਿੰਗ ਦਿੱਤੀ!',
   },
 
   bn: {
@@ -937,6 +971,10 @@ const translations = {
     sendOTP: 'OTP পাঠান',
     confirmOrder: 'অর্ডার নিশ্চিত',
     payment: 'পেমেন্ট',
+    rateFarmer: 'কৃষককে রেটিং দিন',
+    yourRating: 'আপনার রেটিং',
+    submitRating: 'রেটিং দিন',
+    ratingSubmitted: 'রেটিং দেওয়া হয়েছে!',
   },
 };
 

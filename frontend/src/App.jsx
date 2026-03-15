@@ -3,6 +3,7 @@ import useAuth from './hooks/useAuth';
 import Navbar from './components/Navbar';
 import SyncIndicator from './components/SyncIndicator';
 import { LanguageProvider } from './context/LanguageContext';
+import ProfilePage from './pages/Profile';
 
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -90,6 +91,11 @@ export default function App() {
             </ProtectedRoute>
           } />
 
+          <Route path="/profile" element={
+            <ProtectedRoute user={user}>
+              <ProfilePage user={user} onUpdateUser={updateUser} />
+            </ProtectedRoute>
+          } />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>

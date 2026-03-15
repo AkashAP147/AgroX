@@ -24,6 +24,7 @@ const orderSchema = new mongoose.Schema({
   transactionId: { type: String },
   paidVia: { type: String },
   paidAt: { type: Date },
+  otp: { type: String }, // OTP for delivery confirmation
   pickupLocation: { type: String },
   dropLocation: { type: String },
   createdAt: { type: Date, default: Date.now }

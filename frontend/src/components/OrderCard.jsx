@@ -67,11 +67,17 @@ export default function OrderCard({ order, actions }) {
       </div>
 
       {order.paymentStatus === 'paid' && (
-        <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-800">
-          <p className="font-semibold">Transaction: {order.transactionId || 'N/A'}</p>
-          <p>Paid via: {order.paidVia || 'demo-upi@mandi'}</p>
-          <p>Paid at: {order.paidAt ? new Date(order.paidAt).toLocaleString('en-IN') : 'N/A'}</p>
-        </div>
+        <>
+          <div className="mb-2 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs text-emerald-900">
+            <p className="font-semibold text-base text-center tracking-widest">Delivery OTP: <span className="text-lg font-mono">{order.otp || 'N/A'}</span></p>
+            <p className="text-xs text-gray-500 text-center mt-1">Share this OTP with the transporter to receive your order.</p>
+          </div>
+          <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-800">
+            <p className="font-semibold">Transaction: {order.transactionId || 'N/A'}</p>
+            <p>Paid via: {order.paidVia || 'demo-upi@mandi'}</p>
+            <p>Paid at: {order.paidAt ? new Date(order.paidAt).toLocaleString('en-IN') : 'N/A'}</p>
+          </div>
+        </>
       )}
 
       {/* Actions */}

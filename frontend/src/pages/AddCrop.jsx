@@ -32,6 +32,8 @@ export default function AddCrop({ user }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [image, setImage] = useState(null);
+  const [showImageChoice, setShowImageChoice] = useState(false);
+  const cameraInputRef = useRef(null);
   const [gpsStatus, setGpsStatus] = useState('idle'); // idle | loading | success | error
   const [manualLocation, setManualLocation] = useState(false);
   const [coords, setCoords] = useState(null);
@@ -108,6 +110,7 @@ export default function AddCrop({ user }) {
     if (!file) return;
     const compressed = await compressImage(file);
     setImage(compressed);
+    setShowImageChoice(false);
   }
 
   function removeImage() {
@@ -117,6 +120,20 @@ export default function AddCrop({ user }) {
 
   function update(field, value) {
     setForm(f => ({ ...f, [field]: value }));
+  }
+
+  function handleNumericChange(field, value) {
+    // Allow empty or values being typed (restrict to max 2 decimal places)
+    if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+      update(field, value);
+    }
+  }
+
+  function roundToStep(field) {
+    const val = parseFloat(form[field]);
+    if (isNaN(val)) return;
+    const rounded = (Math.round(val * 20) / 20).toFixed(2);
+    update(field, rounded);
   }
 
   async function handleSubmit(e) {
@@ -157,10 +174,24 @@ export default function AddCrop({ user }) {
   const msgText = message.split(':').slice(1).join(':');
 
   return (
-    <div className="page-container max-w-xl">
-      <div className="mb-8">
-        <h1 className="page-title">{t('addCrop')}</h1>
-        <p className="page-subtitle">{t('listProduce')}</p>
+    <div className="page-container max-w-xl relative">
+      <div className="mb-8 pt-2 sm:pt-0">
+        {/* Back Arrow above title */}
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/90 shadow ring-1 ring-primary-100 hover:bg-primary-50 text-primary-600 transition-all duration-150"
+            aria-label="Go back"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="font-medium">Back</span>
+          </button>
+        </div>
+        <h1 className="page-title text-center">{t('addCrop')}</h1>
+        <p className="page-subtitle text-center">{t('listProduce')}</p>
       </div>
 
       {/* Offline banner */}
@@ -203,6 +234,13 @@ export default function AddCrop({ user }) {
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            onChange={handleImageCapture}
+            className="hidden"
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
             capture="environment"
             onChange={handleImageCapture}
             className="hidden"
@@ -224,7 +262,7 @@ export default function AddCrop({ user }) {
           ) : (
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setShowImageChoice(true)}
               className="w-full py-8 border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center gap-2 text-gray-400 hover:border-primary-400 hover:text-primary-500 hover:bg-primary-50/50 transition-all duration-200"
             >
               <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">
@@ -234,15 +272,42 @@ export default function AddCrop({ user }) {
               <span className="text-xs opacity-60">{t('chooseGallery')}</span>
             </button>
           )}
+          {showImageChoice && (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40" onClick={() => setShowImageChoice(false)}>
+              <div className="bg-white rounded-xl shadow-xl p-6 flex flex-col gap-4 min-w-[220px]" onClick={e => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2 rounded-lg bg-primary-600 text-white font-semibold flex items-center justify-center gap-2 hover:bg-primary-700"
+                  onClick={() => { setShowImageChoice(false); setTimeout(() => cameraInputRef.current?.click(), 100); }}
+                >
+                  <Camera className="w-4 h-4" /> Take a Photo
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2 rounded-lg bg-primary-100 text-primary-700 font-semibold flex items-center justify-center gap-2 hover:bg-primary-200"
+                  onClick={() => { setShowImageChoice(false); setTimeout(() => fileInputRef.current?.click(), 100); }}
+                >
+                  <ImageIcon className="w-4 h-4" /> Upload from Device
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-100 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-200"
+                  onClick={() => setShowImageChoice(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Quantity & Price */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">{t('quantity')}</label>
-            <input type="number" className="input" placeholder="e.g. 500"
-              value={form.quantity} onChange={e => update('quantity', e.target.value)}
-              min="1" required />
+            <input type="text" inputMode="decimal" className="input" placeholder="e.g. 500"
+              value={form.quantity} onChange={e => handleNumericChange('quantity', e.target.value)}
+              onBlur={() => roundToStep('quantity')} required />
             <div className="flex flex-wrap gap-1.5 mt-2">
               {['kg', 'quintal', 'ton', 'bag', 'crate'].map(u => (
                 <button type="button" key={u}
@@ -258,9 +323,9 @@ export default function AddCrop({ user }) {
           </div>
           <div>
             <label className="label">{t('pricePerUnit')} {form.quantityUnit} (₹)</label>
-            <input type="number" className="input" placeholder="e.g. 25"
-              value={form.price} onChange={e => update('price', e.target.value)}
-              min="0" step="0.5" required />
+            <input type="text" inputMode="decimal" className="input" placeholder="e.g. 25"
+              value={form.price} onChange={e => handleNumericChange('price', e.target.value)}
+              onBlur={() => roundToStep('price')} required />
           </div>
         </div>
 
@@ -356,7 +421,7 @@ export default function AddCrop({ user }) {
           <div className="bg-primary-50 rounded-2xl p-4 text-center animate-scale-in border border-primary-100">
             <p className="text-xs text-gray-500 mb-1">{t('totalValue')}</p>
             <p className="text-3xl font-extrabold text-primary-700">
-              ₹{(Number(form.quantity) * Number(form.price)).toLocaleString('en-IN')}
+              ₹{(Number(form.quantity) * Number(form.price)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-gray-400 mt-1">{form.quantity} {form.quantityUnit} × ₹{form.price}/{form.quantityUnit}</p>
           </div>

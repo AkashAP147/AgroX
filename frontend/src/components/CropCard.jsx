@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Package, IndianRupee, MapPin, Calendar, Check, AlertCircle, Wheat, X, ZoomIn } from 'lucide-react';
+import StarRating from './StarRating';
 
 export default function CropCard({ crop, actionLabel, onAction }) {
   const available = new Date(crop.availableUntil) > new Date();
@@ -81,7 +82,10 @@ export default function CropCard({ crop, actionLabel, onAction }) {
             {crop.cropName}
           </h3>
           {crop.farmerName && (
-            <p className="text-xs text-gray-400 mt-0.5">by {crop.farmerName}</p>
+            <div>
+              <p className="text-xs text-gray-400 mt-0.5">by {crop.farmerName}</p>
+              <StarRating value={crop.farmerRating || 0} totalRatings={crop.farmerTotalRatings || 0} compact />
+            </div>
           )}
         </div>
         <span className={`badge ${available ? 'badge-green' : 'badge-red'} hidden`}>

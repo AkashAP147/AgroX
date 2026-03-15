@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { registerFarmer, registerRetailer, registerTransporter } from '../services/api';
-import { auth, RecaptchaVerifier, signInWithPhoneNumber } from '../services/firebase';
+import { registerFarmer, registerRetailer, registerTransporter, googleRegister } from '../services/api';
+import { auth, RecaptchaVerifier, signInWithPhoneNumber, GoogleAuthProvider, signInWithPopup } from '../services/firebase';
 import { UserPlus, Tractor, Store, Truck, Loader2, ShieldCheck, ArrowLeft, KeyRound, LocateFixed, MapPin } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -19,6 +19,36 @@ const VEHICLES = [
 ];
 
 export default function Register({ onLogin }) {
+  const [method, setMethod] = useState('google'); // 'google' or 'otp'
+  async function handleGoogleRegister() {
+    setError('');
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      // Prepare registration data
+      const regData = {
+        name: user.displayName,
+        email: user.email,
+        uid: user.uid,
+        photoURL: user.photoURL,
+        role,
+        location,
+        vehicleType: role === 'transporter' ? vehicleType : undefined
+      };
+      if (!location) throw new Error('Location is required');
+      const res = await googleRegister(regData);
+      onLogin(res.user);
+      if (role === 'farmer') navigate('/farmer');
+      else if (role === 'retailer') navigate('/marketplace');
+      else navigate('/transporter');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
   const { t } = useLanguage();
   const [role, setRole] = useState('farmer');
   const [name, setName] = useState('');
@@ -178,25 +208,94 @@ export default function Register({ onLogin }) {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-100 mb-4">
-            {step === 'details'
-              ? <UserPlus className="w-8 h-8 text-primary-700" />
-              : <ShieldCheck className="w-8 h-8 text-primary-700" />
-            }
+            <UserPlus className="w-8 h-8 text-primary-700" />
           </div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-            {step === 'details' ? t('createAccount') : t('verifyOTP')}
-          </h1>
-          <p className="text-gray-500 mt-2">
-            {step === 'details'
-              ? t('joinMandiConnect')
-              : <>{t('otpSentTo')} <span className="font-semibold text-gray-700">+91 {phone}</span></>
-            }
-          </p>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">{t('createAccount')}</h1>
         </div>
 
-        {step === 'details' ? (
-          /* ---- STEP 1: Registration Details ---- */
+        {/* Registration Method Tabs */}
+        <div className="flex gap-2 mb-6">
+          <button className={`btn flex-1 ${method === 'google' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setMethod('google')} type="button">Register with Google</button>
+          <button className={`btn flex-1 ${method === 'otp' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setMethod('otp')} type="button">Register with Mobile & OTP</button>
+        </div>
+
+        {/* Google Registration */}
+        {method === 'google' && (
+          <div className="card-static p-6 sm:p-8 space-y-5">
+            {/* Role */}
+            <div>
+              <label className="label">{t('iAmA')}</label>
+              <div className="grid grid-cols-3 gap-2">
+                {ROLE_IDS.map(r => (
+                  <button type="button" key={r.id}
+                    onClick={() => setRole(r.id)}
+                    className={`chip flex flex-col items-center gap-1.5 py-3
+                      ${role === r.id ? 'chip-active' : 'chip-inactive'}`}>
+                    <r.Icon className="w-5 h-5" />
+                    <span className="text-xs">{t(r.key)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Location */}
+            <div>
+              <label className="label">{t('location')}</label>
+              <input className="input" placeholder={t('villageCityPlaceholder')}
+                value={location} onChange={e => setLocation(e.target.value)} required />
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={detectLiveLocation}
+                  disabled={locating}
+                  className="btn btn-secondary"
+                >
+                  {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
+                  {t('detectViaGPS')}
+                </button>
+                <p className="text-xs text-gray-400 text-right flex items-center gap-1 max-w-[60%]">
+                  <MapPin className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{locationHint || 'Live location will be used when available'}</span>
+                </p>
+              </div>
+            </div>
+            {/* Vehicle Type */}
+            {role === 'transporter' && (
+              <div className="animate-scale-in">
+                <label className="label">{t('vehicleType')}</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {VEHICLES.map(v => (
+                    <button type="button" key={v.value}
+                      onClick={() => setVehicleType(v.value)}
+                      className={`chip text-sm py-2.5 flex items-center justify-center gap-2
+                        ${vehicleType === v.value ? 'chip-active' : 'chip-inactive'}`}>
+                      <v.Icon className="w-4 h-4" /> {v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Error */}
+            {error && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm animate-scale-in">
+                <span className="flex-shrink-0">⚠</span> {error}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleGoogleRegister}
+              className="btn btn-outline w-full text-lg py-3 flex items-center justify-center gap-2"
+              disabled={loading}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21.805 10.023h-9.765v3.977h5.588c-.241 1.285-1.03 2.377-2.199 3.093v2.572h3.548c2.078-1.916 3.298-4.74 2.828-7.642z" fill="#4285F4"/><path d="M12.04 21c2.47 0 4.541-.816 6.055-2.211l-3.548-2.572c-.984.661-2.24 1.054-3.507 1.054-2.695 0-4.98-1.818-5.797-4.267h-3.6v2.684c1.505 2.97 4.646 5.312 8.397 5.312z" fill="#34A853"/><path d="M6.243 13.004a5.996 5.996 0 0 1 0-3.008v-2.684h-3.6a9.003 9.003 0 0 0 0 8.376l3.6-2.684z" fill="#FBBC05"/><path d="M12.04 6.399c1.343 0 2.548.462 3.497 1.36l2.617-2.617c-1.514-1.395-3.585-2.142-6.114-2.142-3.751 0-6.892 2.342-8.397 5.312l3.6 2.684c.817-2.449 3.102-4.267 5.797-4.267z" fill="#EA4335"/></svg>
+              Continue with Google
+            </button>
+          </div>
+        )}
+
+        {/* OTP Registration */}
+        {method === 'otp' && step === 'details' && (
           <form onSubmit={handleSendOTP} className="card-static p-6 sm:p-8 space-y-5">
+            {/* ...existing code for OTP details step... */}
             {/* Role */}
             <div>
               <label className="label">{t('iAmA')}</label>
@@ -296,8 +395,10 @@ export default function Register({ onLogin }) {
               </Link>
             </p>
           </form>
-        ) : (
-          /* ---- STEP 2: OTP Verification ---- */
+        )}
+
+        {/* OTP Verification Step */}
+        {method === 'otp' && step === 'otp' && (
           <form onSubmit={handleVerifyAndRegister} className="card-static p-6 sm:p-8 space-y-5">
             {/* OTP Input */}
             <div>

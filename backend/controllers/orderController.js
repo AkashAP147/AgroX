@@ -1,3 +1,24 @@
+// Verify OTP and mark delivery as delivered
+exports.verifyDeliveryOtp = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { otp } = req.body;
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
+    // Mark order and delivery as delivered
+    order.status = 'delivered';
+    await order.save();
+    const delivery = await Delivery.findOne({ orderId });
+    if (delivery) {
+      delivery.deliveryStatus = 'delivered';
+      await delivery.save();
+    }
+    res.json({ message: 'Delivery confirmed', order });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 const Order = require('../models/Order');
 const Crop = require('../models/Crop');
 const Delivery = require('../models/Delivery');
@@ -23,8 +44,17 @@ exports.createOrder = async (req, res) => {
       cropId, farmerId: crop.farmerId, retailerId, retailerName,
       cropName: crop.cropName, quantity, totalPrice,
       pickupLocation: crop.location,
-      dropLocation: dropLocation || 'Retailer Warehouse'
+      dropLocation: dropLocation || 'Retailer Warehouse',
+      status: 'accepted' // Directly accept order, skip farmer approval
     });
+
+    // Deduct quantity from crop and mark as sold if needed
+    crop.quantity -= quantity;
+    if (crop.quantity <= 0) {
+      crop.quantity = 0;
+      crop.status = 'sold';
+    }
+    await crop.save();
 
     // Create a delivery entry
     await Delivery.create({
@@ -108,7 +138,14 @@ exports.payOrder = async (req, res) => {
     // Find the linked delivery to get transporter info
     const delivery = await Delivery.findOne({ orderId: order._id });
 
-    // Platform receives payment and splits payouts internally.
+    // Generate OTP for delivery confirmation (6 digits)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    order.otp = otp;
+    order.paymentStatus = 'paid';
+    order.paidAt = new Date();
+    await order.save();
+
+    // TODO: Send OTP to retailer (SMS/notification) if needed
     // Retailer pays once; no separate transporter payment needed.
     const farmerPayout = Math.round(order.totalPrice * 0.85);
     const transporterPayout = Math.round(order.totalPrice * 0.10);

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { getRetailerOrders } from '../services/api';
+import { getRetailerOrders, getRetailerRatings, submitRating } from '../services/api';
 import OrderCard from '../components/OrderCard';
+import StarRating from '../components/StarRating';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, CreditCard } from 'lucide-react';
+import { ShoppingCart, CreditCard, Star } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 export default function RetailerOrders({ user }) {
@@ -12,7 +13,12 @@ export default function RetailerOrders({ user }) {
   const [activeTab, setActiveTab] = useState('active'); // 'active' or 'history'
   const navigate = useNavigate();
 
-  useEffect(() => { loadOrders(); }, []);
+  // Rating state
+  const [ratedOrders, setRatedOrders] = useState({}); // { orderId: { rating, comment } }
+  const [ratingOpen, setRatingOpen] = useState(null); // orderId of currently open rating form
+  const [ratingLoading, setRatingLoading] = useState(false);
+
+  useEffect(() => { loadOrders(); loadRatings(); }, []);
 
   async function loadOrders() {
     try {
@@ -20,6 +26,33 @@ export default function RetailerOrders({ user }) {
       setOrders(data);
     } catch { /* offline */ }
     setLoading(false);
+  }
+
+  async function loadRatings() {
+    try {
+      const ratings = await getRetailerRatings(user._id);
+      const map = {};
+      ratings.forEach(r => { map[r.orderId] = { rating: r.rating, comment: r.comment }; });
+      setRatedOrders(map);
+    } catch { /* ignore */ }
+  }
+
+  async function handleSubmitRating(order, { rating, comment }) {
+    setRatingLoading(true);
+    try {
+      await submitRating({
+        orderId: order._id,
+        farmerId: order.farmerId,
+        retailerId: user._id,
+        rating,
+        comment
+      });
+      setRatedOrders(prev => ({ ...prev, [order._id]: { rating, comment } }));
+      setRatingOpen(null);
+    } catch (err) {
+      alert(err.message);
+    }
+    setRatingLoading(false);
   }
 
   function getActions(order) {
@@ -137,7 +170,56 @@ export default function RetailerOrders({ user }) {
         <div className="grid gap-4 sm:grid-cols-2">
           {displayOrders.map((order, i) => (
             <div key={order._id} className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-              <OrderCard order={order} actions={getActions(order)} />
+              <OrderCard order={order} actions={activeTab === 'active' ? getActions(order) : null} />
+
+              {/* Rating section — only on paid orders (history tab) */}
+              {activeTab === 'history' && order.paymentStatus === 'paid' && (
+                <div className="mt-2">
+                  {ratedOrders[order._id] ? (
+                    /* Already rated — show read-only */
+                    <div className="card-static p-3 bg-amber-50/60 border-amber-100">
+                      <div className="flex items-center gap-2">
+                        <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                        <span className="text-sm font-semibold text-gray-700">{t('yourRating')}</span>
+                      </div>
+                      <StarRating value={ratedOrders[order._id].rating} totalRatings={1} compact />
+                      {ratedOrders[order._id].comment && (
+                        <p className="text-xs text-gray-500 mt-1.5 italic">"{ratedOrders[order._id].comment}"</p>
+                      )}
+                    </div>
+                  ) : ratingOpen === order._id ? (
+                    /* Rating form open */
+                    <div className="card-static p-4 border-2 border-amber-200 bg-amber-50/30">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                          <Star className="w-4 h-4 text-amber-500" /> {t('rateFarmer')}
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => setRatingOpen(null)}
+                          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <StarRating
+                        editable
+                        loading={ratingLoading}
+                        onSubmit={(data) => handleSubmitRating(order, data)}
+                      />
+                    </div>
+                  ) : (
+                    /* Rate button */
+                    <button
+                      type="button"
+                      onClick={() => setRatingOpen(order._id)}
+                      className="btn btn-outline w-full text-sm py-2.5 flex items-center justify-center gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+                    >
+                      <Star className="w-4 h-4" /> {t('rateFarmer')}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -1,4 +1,5 @@
 const Crop = require('../models/Crop');
+const Farmer = require('../models/Farmer');
 
 exports.addCrop = async (req, res) => {
   try {
@@ -39,7 +40,19 @@ exports.getAllCrops = async (req, res) => {
       if (minPrice) filter.price.$gte = Number(minPrice);
       if (maxPrice) filter.price.$lte = Number(maxPrice);
     }
-    const crops = await Crop.find(filter).sort({ createdAt: -1 });
+    const crops = await Crop.find(filter).sort({ createdAt: -1 }).lean();
+
+    // Attach farmer rating data
+    const farmerIds = [...new Set(crops.map(c => c.farmerId?.toString()).filter(Boolean))];
+    const farmers = await Farmer.find({ _id: { $in: farmerIds } }, 'averageRating totalRatings').lean();
+    const farmerMap = {};
+    farmers.forEach(f => { farmerMap[f._id.toString()] = f; });
+    crops.forEach(c => {
+      const f = farmerMap[c.farmerId?.toString()];
+      c.farmerRating = f?.averageRating || 0;
+      c.farmerTotalRatings = f?.totalRatings || 0;
+    });
+
     res.json(crops);
   } catch (err) {
     res.status(500).json({ error: err.message });

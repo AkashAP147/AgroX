@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { payOrder, getOrderDetails } from '../services/api';
-import { CreditCard, Smartphone, Landmark, CheckCircle2, Lock, Loader2, Home, Tractor, Truck, ArrowRight, ExternalLink, Check } from 'lucide-react';
+import html2pdf from 'html2pdf.js';
+import { CreditCard, Smartphone, Landmark, CheckCircle2, Lock, Loader2, Home, Tractor, Truck, ArrowRight, ExternalLink, Check, Download } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 const PLATFORM_UPI_ID = '8497847147@upi';
 
 const UPI_APPS = [
-  { id: 'gpay', label: 'Google Pay', scheme: 'tez://upi/pay' },
-  { id: 'phonepe', label: 'PhonePe', scheme: 'phonepe://pay' },
-  { id: 'paytm', label: 'Paytm', scheme: 'paytmmp://pay' },
-  { id: 'upi', label: 'Any UPI App', scheme: 'upi://pay' }
+  { id: 'gpay', label: 'Google Pay' },
+  { id: 'phonepe', label: 'PhonePe' },
+  { id: 'paytm', label: 'Paytm' },
+  { id: 'upi', label: 'Any UPI App' }
 ];
 
 export default function PaymentPage() {
@@ -26,6 +27,7 @@ export default function PaymentPage() {
   const [payMethod, setPayMethod] = useState('gpay');
   const [appPickerOpen, setAppPickerOpen] = useState(false);
   const [paymentInitiated, setPaymentInitiated] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (orderId) {
@@ -39,7 +41,7 @@ export default function PaymentPage() {
   const platformAmount = total - farmerAmount - transporterAmount;
 
   function buildUpiLink(appId) {
-    const app = UPI_APPS.find(item => item.id === appId) || UPI_APPS[0];
+    // Always use the generic UPI scheme for maximum compatibility
     const params = new URLSearchParams({
       pa: PLATFORM_UPI_ID,
       pn: 'AgroX Platform',
@@ -47,7 +49,7 @@ export default function PaymentPage() {
       cu: 'INR',
       tn: `Order payment ${orderId}`
     }).toString();
-    return `${app.scheme}?${params}`;
+    return `upi://pay?${params}`;
   }
 
   function launchUpiApp(appId) {
@@ -70,152 +72,129 @@ export default function PaymentPage() {
     setLoading(false);
   }
 
+  async function handleDownloadPDF() {
+    setDownloading(true);
+    try {
+      const dateStr = new Date().toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+      const receiptNo = result?.transactionId || 'N/A';
+      const oId = orderId?.slice(-8) || 'N/A';
+      const cropName = orderInfo?.order?.cropName || 'Item';
+      const qty = orderInfo?.order?.quantity || 0;
+      const totalAmt = result?.amount || 0;
+      const rate = qty > 0 ? (totalAmt / qty).toFixed(2) : '0.00';
+      const retailerName = orderInfo?.retailerName || orderInfo?.order?.retailerName || 'N/A';
+      const farmerName = orderInfo?.farmerName || 'N/A';
+      const transporterName = orderInfo?.transporterName || 'Not assigned';
+
+      const html = `
+        <div style="width:280px;font-family:'Courier New',monospace;color:#000;padding:12px 8px;font-size:11px;line-height:1.5;">
+          <!-- Header -->
+          <div style="text-align:center;margin-bottom:6px;">
+            <div style="font-size:22px;font-weight:900;letter-spacing:2px;">AGROX</div>
+            <div style="font-size:9px;margin:2px 0;">AGRICULTURAL MARKETPLACE</div>
+            <div style="font-size:8px;color:#444;">Farm-to-Retailer • No Middlemen</div>
+            <div style="font-size:8px;color:#444;">www.agrox.in</div>
+          </div>
+
+          <div style="border-top:2px solid #000;margin:6px 0;"></div>
+
+          <!-- Store & Receipt Info -->
+          <div style="font-size:10px;">
+            <div style="display:flex;justify-content:space-between;"><span>Receipt #</span><span style="font-weight:bold;">${receiptNo}</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>Order ID</span><span style="font-weight:bold;">${oId}</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>Date</span><span>${dateStr}</span></div>
+          </div>
+
+          <div style="border-top:1px dashed #000;margin:6px 0;"></div>
+
+          <!-- Parties -->
+          <div style="font-size:10px;margin-bottom:4px;">
+            <div style="font-weight:bold;text-align:center;margin-bottom:3px;font-size:10px;text-decoration:underline;">PARTY DETAILS</div>
+            <div style="display:flex;justify-content:space-between;"><span>Retailer:</span><span style="font-weight:bold;">${retailerName}</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>Farmer:</span><span style="font-weight:bold;">${farmerName}</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>Transporter:</span><span style="font-weight:bold;">${transporterName}</span></div>
+          </div>
+
+          <div style="border-top:1px dashed #000;margin:6px 0;"></div>
+
+          <!-- Items Table (DMart style) -->
+          <table style="width:100%;font-size:10px;border-collapse:collapse;">
+            <tr style="font-weight:bold;border-bottom:1px solid #000;">
+              <td style="padding:3px 0;text-align:left;">ITEM</td>
+              <td style="padding:3px 0;text-align:center;">QTY</td>
+              <td style="padding:3px 0;text-align:center;">RATE</td>
+              <td style="padding:3px 0;text-align:right;">AMOUNT</td>
+            </tr>
+            <tr style="border-bottom:1px dashed #ccc;">
+              <td style="padding:4px 0;text-align:left;">${cropName}</td>
+              <td style="padding:4px 0;text-align:center;">${qty} kg</td>
+              <td style="padding:4px 0;text-align:center;">₹${rate}</td>
+              <td style="padding:4px 0;text-align:right;font-weight:bold;">₹${totalAmt.toLocaleString('en-IN')}</td>
+            </tr>
+          </table>
+
+          <div style="border-top:1px dashed #000;margin:6px 0;"></div>
+
+          <!-- Payment Breakdown -->
+          <div style="font-size:10px;">
+            <div style="font-weight:bold;text-align:center;margin-bottom:3px;text-decoration:underline;">PAYMENT SPLIT</div>
+            <div style="display:flex;justify-content:space-between;"><span>Farmer Payout (85%)</span><span>₹${result.farmerPayout?.toLocaleString('en-IN')}</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>Transport Fee (10%)</span><span>₹${result.transporterPayout?.toLocaleString('en-IN')}</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>Platform Fee (5%)</span><span>₹${result.platformFee?.toLocaleString('en-IN')}</span></div>
+          </div>
+
+          <div style="border-top:2px solid #000;margin:8px 0;"></div>
+
+          <!-- Total -->
+          <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:900;">
+            <span>TOTAL PAID</span>
+            <span>₹${totalAmt.toLocaleString('en-IN')}</span>
+          </div>
+
+          <div style="border-top:2px solid #000;margin:8px 0;"></div>
+
+          <!-- Payment Info -->
+          <div style="font-size:10px;">
+            <div style="display:flex;justify-content:space-between;"><span>Payment Mode:</span><span style="font-weight:bold;">${payMethod.toUpperCase()}</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>UPI ID:</span><span style="font-weight:bold;">${PLATFORM_UPI_ID}</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>Status:</span><span style="font-weight:bold;">✓ PAID</span></div>
+          </div>
+
+          <div style="border-top:1px dashed #000;margin:8px 0;"></div>
+
+          <!-- Footer -->
+          <div style="text-align:center;font-size:9px;color:#333;">
+            <div style="margin-bottom:4px;">Payment collected by AgroX platform</div>
+            <div>Settled to farmer & transporter accounts</div>
+            <div style="margin-top:6px;font-size:8px;color:#666;">--- Items once sold are non-returnable ---</div>
+            <div style="margin-top:8px;font-size:11px;font-weight:bold;">★ THANK YOU FOR USING AGROX ★</div>
+            <div style="font-size:8px;color:#888;margin-top:4px;">Save this receipt for your records</div>
+          </div>
+        </div>
+      `;
+
+      const opt = {
+        margin: [2, 0, 2, 0],
+        filename: `AgroX_Receipt_${receiptNo}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 3, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: [80, 220], orientation: 'portrait' }
+      };
+      await html2pdf().set(opt).from(html).save();
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+    }
+    setDownloading(false);
+  }
+
   // Success state
   if (result && !result.error) {
     return (
       <>
-        {/* Print-only bill */}
-        <style>{`
-          @media print {
-            body { margin: 0; padding: 0; background: white; }
-            
-            /* Hide all web UI elements */
-            .print-hidden { display: none !important; }
-            .page-container { display: none !important; }
-            .card-static { display: none !important; }
-            .btn { display: none !important; }
-            .navbar { display: none !important; }
-            nav { display: none !important; }
-            header { display: none !important; }
-            
-            /* Show bill */
-            .print-only { 
-              display: block !important;
-              margin: 0;
-              padding: 0;
-            }
-            
-            .bill-container {
-              width: 80mm;
-              padding: 0;
-              margin: 0 auto;
-              font-family: 'Courier New', monospace;
-              background: white;
-              color: black;
-              page-break-after: avoid;
-            }
-            .bill-header { text-align: center; margin-bottom: 10px; }
-            .bill-title { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
-            .bill-subtitle { font-size: 11px; color: #000; margin-bottom: 10px; }
-            .bill-divider { border-top: 1px dashed #000; margin: 8px 0; }
-            .bill-item { display: flex; justify-content: space-between; font-size: 11px; margin: 4px 0; }
-            .bill-label { flex: 1; }
-            .bill-value { text-align: right; font-weight: bold; margin-left: 10px; }
-            .bill-total { font-size: 14px; font-weight: bold; margin: 10px 0; display: flex; justify-content: space-between; }
-            .bill-breakdown { font-size: 10px; margin: 8px 0; }
-            .bill-footer { text-align: center; font-size: 10px; margin-top: 15px; color: #000; }
-          }
-          @media screen {
-            .print-only { display: none !important; }
-          }
-        `}</style>
 
-        {/* Print Bill Layout */}
-        <div className="print-only bill-container">
-          <div className="bill-header">
-            <div className="bill-title">AGROX</div>
-            <div className="bill-subtitle">Agricultural Payment Receipt</div>
-            <div className="bill-subtitle">www.agrox.in</div>
-          </div>
-
-          <div className="bill-divider"></div>
-
-          <div className="bill-item">
-            <span className="bill-label">Receipt No:</span>
-            <span className="bill-value">{result.transactionId}</span>
-          </div>
-          <div className="bill-item">
-            <span className="bill-label">Order ID:</span>
-            <span className="bill-value">{orderId?.slice(-8)}</span>
-          </div>
-          <div className="bill-item">
-            <span className="bill-label">Date & Time:</span>
-            <span className="bill-value">{new Date().toLocaleString('en-IN')}</span>
-          </div>
-
-          <div className="bill-divider"></div>
-
-          {orderInfo && (
-            <>
-              <div className="bill-item">
-                <span className="bill-label">Retailer:</span>
-                <span className="bill-value">{orderInfo.retailerName || 'N/A'}</span>
-              </div>
-              <div className="bill-item">
-                <span className="bill-label">Farmer:</span>
-                <span className="bill-value">{orderInfo.farmerName || 'N/A'}</span>
-              </div>
-              <div className="bill-item">
-                <span className="bill-label">Transporter:</span>
-                <span className="bill-value">{orderInfo.transporterName || 'N/A'}</span>
-              </div>
-              <div className="bill-item">
-                <span className="bill-label">Crop:</span>
-                <span className="bill-value">{orderInfo.cropName || 'N/A'}</span>
-              </div>
-              <div className="bill-item">
-                <span className="bill-label">Quantity:</span>
-                <span className="bill-value">{orderInfo.quantity} kg</span>
-              </div>
-            </>
-          )}
-
-          <div className="bill-divider"></div>
-
-          <div className="bill-breakdown">
-            <div style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '5px' }}>PAYMENT BREAKDOWN</div>
-            <div className="bill-item">
-              <span className="bill-label">Farmer (85%):</span>
-              <span className="bill-value">₹{result.farmerPayout?.toLocaleString('en-IN')}</span>
-            </div>
-            <div className="bill-item">
-              <span className="bill-label">Transporter (10%):</span>
-              <span className="bill-value">₹{result.transporterPayout?.toLocaleString('en-IN')}</span>
-            </div>
-            <div className="bill-item">
-              <span className="bill-label">Platform Fee (5%):</span>
-              <span className="bill-value">₹{result.platformFee?.toLocaleString('en-IN')}</span>
-            </div>
-          </div>
-
-          <div className="bill-divider"></div>
-
-          <div className="bill-total">
-            <span>TOTAL PAID:</span>
-            <span>₹{result.amount?.toLocaleString('en-IN')}</span>
-          </div>
-
-          <div className="bill-item">
-            <span className="bill-label">Payment Mode:</span>
-            <span className="bill-value">{payMethod.toUpperCase()}</span>
-          </div>
-          <div className="bill-item">
-            <span className="bill-label">UPI ID:</span>
-            <span className="bill-value">{PLATFORM_UPI_ID}</span>
-          </div>
-
-          <div className="bill-divider"></div>
-
-          <div className="bill-footer">
-            <div>Thank you for using AgroX</div>
-            <div style={{ marginTop: '8px', fontSize: '9px' }}>Payment collected by platform and</div>
-            <div style={{ fontSize: '9px' }}>settled to farmer and transporter</div>
-            <div style={{ marginTop: '10px' }}>**** THANK YOU ****</div>
-          </div>
-        </div>
 
         {/* Screen View */}
-        <div className="page-container max-w-md print-hidden">
+        <div className="page-container max-w-md">
           <div className="card-static text-center py-10 animate-scale-in">
             {/* Success icon */}
             <div className="relative mx-auto w-20 h-20 mb-6">
@@ -273,10 +252,12 @@ export default function PaymentPage() {
             </div>
 
             <button
-              onClick={() => window.print()}
-              className="btn btn-secondary w-full mb-3"
+              onClick={handleDownloadPDF}
+              disabled={downloading}
+              className="btn btn-secondary w-full mb-3 flex items-center justify-center gap-2"
             >
-              Print & Download Invoice
+              <Download className="w-4 h-4" />
+              {downloading ? 'Generating PDF...' : 'Download Invoice PDF'}
             </button>
 
             <button onClick={() => navigate('/')} className="btn btn-primary w-full text-lg py-4">
@@ -402,29 +383,6 @@ export default function PaymentPage() {
 
       {/* Payment form */}
       <form onSubmit={handlePay} className="card-static p-6 sm:p-8 space-y-5">
-        {/* Payment methods */}
-        <div>
-          <label className="label">{t('paymentMethod')}</label>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { id: 'gpay', Icon: Smartphone, label: 'Google Pay' },
-              { id: 'phonepe', Icon: Smartphone, label: 'PhonePe' },
-              { id: 'upi', Icon: Landmark, label: 'Any UPI' }
-            ].map(m => (
-              <div key={m.id}
-                onClick={() => setPayMethod(m.id)}
-                className={`flex flex-col items-center gap-2 py-4 rounded-xl border-2 cursor-pointer transition-all duration-200
-                  ${payMethod === m.id
-                    ? 'border-primary-500 bg-primary-50 shadow-sm shadow-primary-100'
-                    : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                <m.Icon className={`w-6 h-6 ${payMethod === m.id ? 'text-primary-600' : 'text-gray-400'}`} />
-                <span className={`text-xs font-semibold ${payMethod === m.id ? 'text-primary-700' : 'text-gray-500'}`}>{m.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div>
           <label className="label">Payment Destination</label>
           <div className="input flex items-center justify-between bg-gray-50">

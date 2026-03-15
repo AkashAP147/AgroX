@@ -1,0 +1,16 @@
+{
+  "name": "AgroX",
+  "short_name": "AgroX",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4CAF50",
+  "description": "AgroX - Connecting farmers, retailers, and transporters.",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

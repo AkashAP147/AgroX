@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getFarmerCrops } from '../services/api';
+import { getFarmerCrops, updateFarmerProfile } from '../services/api';
 import { getPendingCrops } from '../services/offlineDB';
 import CropCard from '../components/CropCard';
 import VoiceCropInput from '../components/VoiceCropInput';
-import { Wheat, CheckCircle2, IndianRupee, Upload, MapPin, Plus, TrendingUp, TrendingDown, Minus, BarChart3, Sprout, Clock } from 'lucide-react';
+import { Wheat, CheckCircle2, IndianRupee, Upload, MapPin, Plus, TrendingUp, TrendingDown, Minus, BarChart3, Sprout, Clock, ClipboardList } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 const HEATMAP_DATA = [
@@ -25,11 +25,50 @@ const DEMAND_COLORS = {
   4: 'bg-red-100 text-red-700 ring-red-200'
 };
 
-export default function FarmerDashboard({ user }) {
+
+import React from 'react';
+
+export default function FarmerDashboard({ user, onUpdateUser }) {
   const { t } = useLanguage();
   const [crops, setCrops] = useState([]);
   const [pendingCrops, setPendingCrops] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Only show phone modal if phone is missing and user hasn't dismissed for this account
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState('');
+
+  useEffect(() => {
+    // Use localStorage to persist modal dismissal per user
+    if (!user.phone) {
+      const dismissed = localStorage.getItem(`phoneModalDismissed_${user._id}`);
+      setShowPhoneModal(!dismissed);
+    } else {
+      setShowPhoneModal(false);
+    }
+  }, [user.phone, user._id]);
+  async function handleSavePhone(e) {
+    e.preventDefault();
+    setPhoneError('');
+    if (!/^\d{10}$/.test(phoneInput)) {
+      setPhoneError('Please enter a valid 10-digit number');
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      const res = await updateFarmerProfile(user._id, { upiId: user.upiId, upiQr: user.upiQr, phone: phoneInput });
+      if (onUpdateUser) onUpdateUser(res.user);
+      setShowPhoneModal(false);
+      localStorage.setItem(`phoneModalDismissed_${user._id}`, '1'); // Persist dismissal
+    } catch (err) {
+      setPhoneError(err.message);
+    } finally {
+      setPhoneLoading(false);
+    }
+  }
 
   useEffect(() => {
     loadCrops();
@@ -51,21 +90,100 @@ export default function FarmerDashboard({ user }) {
     } catch { /* ignore */ }
   }
 
+  // Function to update live location
+  async function handleUpdateLocation() {
+    setLocationError('');
+    setLocationLoading(true);
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      setLocationLoading(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      try {
+        // Use a reverse geocoding API to get a human-readable address
+        const { latitude, longitude } = position.coords;
+        // Example using OpenStreetMap Nominatim
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+        const data = await res.json();
+        const address = data.display_name || `${latitude}, ${longitude}`;
+        // Update backend profile
+        const updated = await updateFarmerProfile(user._id, { ...user, location: address });
+        if (onUpdateUser) onUpdateUser(updated.user);
+      } catch (err) {
+        setLocationError('Failed to update location');
+      } finally {
+        setLocationLoading(false);
+      }
+    }, (err) => {
+      setLocationError('Unable to retrieve your location');
+      setLocationLoading(false);
+    });
+  }
+
   return (
     <div className="page-container">
+      {/* Phone Modal */}
+      {showPhoneModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-xs animate-fade-in">
+            <h2 className="text-lg font-bold mb-2 text-center">Add your phone number</h2>
+            <p className="text-gray-500 text-sm mb-4 text-center">For contact and notifications, please add your 10-digit phone number.</p>
+            <form onSubmit={handleSavePhone}>
+              <input
+                className="input w-full mb-2"
+                placeholder="Enter 10-digit phone"
+                value={phoneInput}
+                onChange={e => setPhoneInput(e.target.value.replace(/[^\d]/g, ''))}
+                maxLength={10}
+                disabled={phoneLoading}
+                autoFocus
+              />
+              {phoneError && <div className="text-red-600 text-xs mb-2">{phoneError}</div>}
+              <button type="submit" className="btn btn-primary w-full" disabled={phoneLoading}>
+                {phoneLoading ? 'Saving...' : 'Save'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
       {/* Welcome header */}
       <div className="flex items-start sm:items-center justify-between mb-8 flex-wrap gap-4">
         <div>
           <h1 className="page-title">{t('welcome')}, {user.name}!</h1>
-          <p className="page-subtitle flex items-center gap-1.5 mt-1">
-            <MapPin className="w-4 h-4 text-gray-400" />
-            {user.location}
-          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="page-subtitle flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-gray-400" />
+              {user.location}
+            </p>
+            <button
+              className="btn btn-xs btn-outline-primary flex items-center gap-1"
+              onClick={handleUpdateLocation}
+              disabled={locationLoading}
+              title="Update live location"
+            >
+              {locationLoading ? (
+                <span className="animate-spin"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg></span>
+              ) : (
+                <span className="flex items-center"><Upload className="w-4 h-4" /> <span className="hidden sm:inline">Update</span></span>
+              )}
+            </button>
+          </div>
+          {locationError && <div className="text-xs text-red-600 mt-1">{locationError}</div>}
         </div>
         <div className="flex items-center gap-2">
           <VoiceCropInput user={user} onCropAdded={loadCrops} buttonLabel="Voice Add" />
           <Link to="/farmer/add-crop" className="btn btn-primary text-base">
             <Plus className="w-5 h-5" /> {t('addCrop')}
+          </Link>
+          {/* Mobile only: See Orders button */}
+          <Link
+            to="/farmer/orders"
+            className="btn btn-outline-primary text-base flex items-center gap-1 px-3 py-2 sm:hidden"
+            style={{ minWidth: 0 }}
+          >
+            <ClipboardList className="w-5 h-5" />
+            <span className="hidden xs:inline">{t('seeOrders') || 'See Orders'}</span>
           </Link>
         </div>
       </div>

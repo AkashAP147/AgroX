@@ -1,3 +1,7 @@
+export const verifyDeliveryOtp = (orderId, otp) => request(`/orders/${orderId}/verify-otp`, { method: 'POST', body: { otp } });
+// Google Auth
+export const googleRegister = (data) => request('/auth/google/register', { method: 'POST', body: data });
+export const googleLogin = (data) => request('/auth/google/login', { method: 'POST', body: data });
 const API_BASE = '/api';
 
 async function request(url, options = {}) {
@@ -14,14 +18,16 @@ async function request(url, options = {}) {
 }
 
 // Auth
-export const sendOTP = (phone) => request('/auth/send-otp', { method: 'POST', body: { phone } });
-export const verifyOTP = (phone, otp) => request('/auth/verify-otp', { method: 'POST', body: { phone, otp } });
+// Removed backend OTP endpoints; use Firebase only
 export const registerFarmer = (data) => request('/auth/register/farmer', { method: 'POST', body: data });
 export const registerRetailer = (data) => request('/auth/register/retailer', { method: 'POST', body: data });
 export const registerTransporter = (data) => request('/auth/register/transporter', { method: 'POST', body: data });
 export const login = (data) => request('/auth/login', { method: 'POST', body: data });
 
+
 export const updateFarmerProfile = (id, data) => request(`/auth/profile/farmer/${id}`, { method: 'PUT', body: data });
+export const updateTransporterProfile = (id, data) => request(`/auth/profile/transporter/${id}`, { method: 'PUT', body: data });
+export const updateRetailerProfile = (id, data) => request(`/auth/profile/retailer/${id}`, { method: 'PUT', body: data });
 
 // Crops
 export const addCrop = (data) => request('/crops/add', { method: 'POST', body: data });
@@ -45,3 +51,8 @@ export const getPendingDeliveries = () => request('/deliveries/pending');
 export const getTransporterDeliveries = (transporterId) => request(`/deliveries/transporter/${transporterId}`);
 export const acceptDelivery = (deliveryId, data) => request(`/deliveries/${deliveryId}/accept`, { method: 'PUT', body: data });
 export const updateDeliveryStatus = (deliveryId, status) => request(`/deliveries/${deliveryId}/status`, { method: 'PUT', body: { status } });
+
+// Ratings
+export const submitRating = (data) => request('/ratings', { method: 'POST', body: data });
+export const getFarmerRatings = (farmerId) => request(`/ratings/farmer/${farmerId}`);
+export const getRetailerRatings = (retailerId) => request(`/ratings/retailer/${retailerId}`);

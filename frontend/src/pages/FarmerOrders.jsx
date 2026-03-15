@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
 import { getFarmerOrders, updateOrderStatus } from '../services/api';
 import OrderCard from '../components/OrderCard';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Download, Package, CreditCard } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
+import * as XLSX from 'xlsx';
 
 export default function FarmerOrders({ user }) {
   const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active'); // 'active' or 'history'
+  const navigate = useNavigate();
 
   useEffect(() => { loadOrders(); }, []);
 
@@ -30,13 +33,59 @@ export default function FarmerOrders({ user }) {
   }
 
   function getActions(order) {
-    if (order.status === 'pending') {
-      return [
-        { label: t('accept'), onClick: (o) => handleStatus(o, 'accepted'), className: 'btn-primary' },
-        { label: t('reject'), onClick: (o) => handleStatus(o, 'rejected'), className: 'btn-danger' }
-      ];
-    }
+    // Accept/reject actions removed: orders are auto-accepted
     return null;
+  }
+
+  function exportToExcel() {
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: All Orders
+    const orderRows = orders.map(o => ({
+      'Crop Name': o.cropName || 'N/A',
+      'Retailer Name': o.retailerName || 'N/A',
+      'Quantity (kg)': o.quantity,
+      'Total Price (₹)': o.totalPrice,
+      'Farmer Payout (₹)': o.farmerPayout || 0,
+      'Status': o.status,
+      'Payment Status': o.paymentStatus,
+      'Transaction ID': o.transactionId || 'N/A',
+      'Date': new Date(o.createdAt).toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', year: 'numeric'
+      })
+    }));
+    const ws1 = XLSX.utils.json_to_sheet(orderRows);
+    ws1['!cols'] = [
+      { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 16 },
+      { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 16 }
+    ];
+    XLSX.utils.book_append_sheet(wb, ws1, 'All Orders');
+
+    // Sheet 2: Retailer Summary (earnings per retailer)
+    const retailerMap = {};
+    orders.forEach(o => {
+      const name = o.retailerName || 'Unknown';
+      if (!retailerMap[name]) {
+        retailerMap[name] = { orderCount: 0, totalQty: 0, totalEarned: 0 };
+      }
+      retailerMap[name].orderCount += 1;
+      retailerMap[name].totalQty += o.quantity;
+      retailerMap[name].totalEarned += (o.farmerPayout || o.totalPrice || 0);
+    });
+    const summaryRows = Object.entries(retailerMap).map(([name, data]) => ({
+      'Retailer Name': name,
+      'Order Count': data.orderCount,
+      'Total Quantity (kg)': data.totalQty,
+      'Total Earned (₹)': data.totalEarned,
+      'Avg Order Value (₹)': Math.round(data.totalEarned / data.orderCount)
+    }));
+    const ws2 = XLSX.utils.json_to_sheet(summaryRows);
+    ws2['!cols'] = [
+      { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 18 }, { wch: 20 }
+    ];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Retailer Summary');
+
+    XLSX.writeFile(wb, 'farmer_orders_report.xlsx');
   }
 
   const pendingCount = orders.filter(o => o.status === 'pending').length;
@@ -56,8 +105,33 @@ export default function FarmerOrders({ user }) {
   return (
     <div className="page-container">
       <div className="mb-8">
-        <h1 className="page-title">{t('yourOrders')}</h1>
-        <p className="page-subtitle">{t('manageOrders')}</p>
+        {/* Back Arrow above title */}
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/90 shadow ring-1 ring-primary-100 hover:bg-primary-50 text-primary-600 transition-all duration-150"
+            aria-label="Go back"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="font-medium">Back</span>
+          </button>
+        </div>
+        <h1 className="page-title text-center">{t('yourOrders')}</h1>
+        <p className="page-subtitle text-center">{t('manageOrders')}</p>
+        {orders.length > 0 && (
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={exportToExcel}
+              className="btn btn-primary flex items-center gap-2 text-sm px-4 py-2.5 shadow-lg hover:shadow-xl transition-all"
+            >
+              <Download className="w-4 h-4" />
+              Export Excel
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -70,7 +144,7 @@ export default function FarmerOrders({ user }) {
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
-          📦 Order List ({activeOrders.length})
+          <Package className="inline w-4 h-4 mr-1 -mt-0.5" /> Order List ({activeOrders.length})
         </button>
         <button
           onClick={() => setActiveTab('history')}
@@ -80,7 +154,7 @@ export default function FarmerOrders({ user }) {
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
-          💰 Transaction History ({paymentHistory.length})
+          <CreditCard className="inline w-4 h-4 mr-1 -mt-0.5" /> Transaction History ({paymentHistory.length})
         </button>
       </div>
 
