@@ -210,7 +210,7 @@ export default function FarmerOrders({ user }) {
         <div className="grid gap-4 sm:grid-cols-2">
           {displayOrders.map((order, i) => (
             <div key={order._id} className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-              <OrderCard order={order} actions={activeTab === 'active' ? getActions(order) : null} />
+              <OrderCard order={order} actions={activeTab === 'active' ? getActions(order) : null} showOtp={false} />
             </div>
           ))}
         </div>

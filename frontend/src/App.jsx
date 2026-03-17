@@ -4,6 +4,18 @@ import Navbar from './components/Navbar';
 import SyncIndicator from './components/SyncIndicator';
 import { LanguageProvider } from './context/LanguageContext';
 import ProfilePage from './pages/Profile';
+import EditCrop from './pages/EditCrop';
+import { useState, useEffect } from 'react';
+import { getFarmerCrops } from './services/api';
+
+// Wrapper to provide crops and reload logic to EditCrop
+function EditCropWrapper({ user }) {
+  const [crops, setCrops] = useState([]);
+  useEffect(() => {
+    getFarmerCrops(user._id).then(setCrops);
+  }, [user._id]);
+  return <EditCrop crops={crops} onCropUpdated={() => getFarmerCrops(user._id).then(setCrops)} />;
+}
 
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -58,6 +70,11 @@ export default function App() {
               <AddCrop user={user} />
             </ProtectedRoute>
           } />
+          <Route path="/farmer/edit-crop/:cropId" element={
+            <ProtectedRoute user={user} role="farmer">
+              <EditCropWrapper user={user} />
+            </ProtectedRoute>
+          } />
           <Route path="/farmer/orders" element={
             <ProtectedRoute user={user} role="farmer">
               <FarmerOrders user={user} />
@@ -71,11 +88,14 @@ export default function App() {
               <OrderPage user={user} />
             </ProtectedRoute>
           } />
+
           <Route path="/retailer/orders" element={
             <ProtectedRoute user={user} role="retailer">
               <RetailerOrders user={user} />
             </ProtectedRoute>
           } />
+
+
 
           {/* Payment */}
           <Route path="/payment/:orderId" element={

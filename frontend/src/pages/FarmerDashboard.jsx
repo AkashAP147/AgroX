@@ -1,10 +1,27 @@
 import { useState, useEffect } from 'react';
+// Import reverseGeocode from Profile.jsx
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=14&addressdetails=1`,
+      { headers: { 'Accept-Language': 'en' } }
+    );
+    const data = await res.json();
+    const addr = data.address || {};
+    const name = addr.village || addr.town || addr.city || addr.suburb || addr.county ||
+      data.display_name?.split(',').slice(0, 3).join(',') || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    return name.trim();
+  } catch {
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
+}
 import { Link } from 'react-router-dom';
 import { getFarmerCrops, updateFarmerProfile } from '../services/api';
 import { getPendingCrops } from '../services/offlineDB';
 import CropCard from '../components/CropCard';
+import { deleteCrop } from '../services/api';
 import VoiceCropInput from '../components/VoiceCropInput';
-import { Wheat, CheckCircle2, IndianRupee, Upload, MapPin, Plus, TrendingUp, TrendingDown, Minus, BarChart3, Sprout, Clock, ClipboardList } from 'lucide-react';
+import { Wheat, CheckCircle2, IndianRupee, MapPin, Plus, TrendingUp, TrendingDown, Minus, BarChart3, Sprout, Clock, ClipboardList, Pencil } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 const HEATMAP_DATA = [
@@ -101,13 +118,8 @@ export default function FarmerDashboard({ user, onUpdateUser }) {
     }
     navigator.geolocation.getCurrentPosition(async (position) => {
       try {
-        // Use a reverse geocoding API to get a human-readable address
         const { latitude, longitude } = position.coords;
-        // Example using OpenStreetMap Nominatim
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-        const data = await res.json();
-        const address = data.display_name || `${latitude}, ${longitude}`;
-        // Update backend profile
+        const address = await reverseGeocode(latitude, longitude);
         const updated = await updateFarmerProfile(user._id, { ...user, location: address });
         if (onUpdateUser) onUpdateUser(updated.user);
       } catch (err) {
@@ -118,7 +130,7 @@ export default function FarmerDashboard({ user, onUpdateUser }) {
     }, (err) => {
       setLocationError('Unable to retrieve your location');
       setLocationLoading(false);
-    });
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 });
   }
 
   return (
@@ -152,21 +164,19 @@ export default function FarmerDashboard({ user, onUpdateUser }) {
         <div>
           <h1 className="page-title">{t('welcome')}, {user.name}!</h1>
           <div className="flex items-center gap-2 mt-1">
-            <p className="page-subtitle flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-gray-400" />
-              {user.location}
-            </p>
             <button
-              className="btn btn-xs btn-outline-primary flex items-center gap-1"
+              className="page-subtitle flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 rounded px-1 py-0.5"
               onClick={handleUpdateLocation}
               disabled={locationLoading}
-              title="Update live location"
+              title="Click to update location"
+              style={{ background: 'none', border: 'none' }}
             >
               {locationLoading ? (
-                <span className="animate-spin"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg></span>
+                <span className="animate-spin"><svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg></span>
               ) : (
-                <span className="flex items-center"><Upload className="w-4 h-4" /> <span className="hidden sm:inline">Update</span></span>
+                <MapPin className="w-4 h-4 text-blue-600" />
               )}
+              <span className="ml-1">{user.location}</span>
             </button>
           </div>
           {locationError && <div className="text-xs text-red-600 mt-1">{locationError}</div>}
@@ -194,7 +204,7 @@ export default function FarmerDashboard({ user, onUpdateUser }) {
           { label: t('totalCrops'), value: crops.length, Icon: Wheat, color: 'text-primary-600' },
           { label: t('available'), value: crops.filter(c => c.status === 'available').length, Icon: CheckCircle2, color: 'text-emerald-600' },
           { label: t('sold'), value: crops.filter(c => c.status === 'sold').length, Icon: IndianRupee, color: 'text-amber-600' },
-          { label: t('pendingSync'), value: pendingCrops.length, Icon: Upload, color: 'text-blue-600' }
+          { label: t('pendingSync'), value: pendingCrops.length, Icon: Clock, color: 'text-blue-500' }
         ].map((stat, i) => (
           <div key={stat.label} className="stat-card animate-fade-in" style={{ animationDelay: `${i * 0.1}s` }}>
             <stat.Icon className={`w-6 h-6 ${stat.color} mx-auto mb-2`} />
@@ -309,7 +319,28 @@ export default function FarmerDashboard({ user, onUpdateUser }) {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {crops.map(crop => <CropCard key={crop._id} crop={crop} />)}
+            {crops.map(crop => (
+              <div key={crop._id} className="relative group">
+                <CropCard
+                  crop={crop}
+                  // onEdit is not used for inline edit, but we can pass a callback for after edit
+                  onEdit={loadCrops}
+                  onDelete={async () => {
+                    if (window.confirm('Are you sure you want to delete this crop?')) {
+                      try {
+                        await deleteCrop(crop._id);
+                        loadCrops();
+                      } catch (err) {
+                        alert('Failed to delete crop: ' + err.message);
+                      }
+                    }
+                  }}
+                  // Add a prop to trigger reload after inline edit
+                  onAfterEdit={loadCrops}
+                  isFarmer={true}
+                />
+              </div>
+            ))}
           </div>
         )}
       </div>

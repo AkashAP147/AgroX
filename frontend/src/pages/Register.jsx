@@ -19,7 +19,42 @@ const VEHICLES = [
 ];
 
 export default function Register({ onLogin }) {
-  const [method, setMethod] = useState('google'); // 'google' or 'otp'
+  const [method, setMethod] = useState('email'); // 'email', 'google', or 'otp'
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    // Email/password registration handler
+    async function handleEmailRegister(e) {
+      e.preventDefault();
+      setError('');
+      setLoading(true);
+      try {
+        if (!email || !password) throw new Error('Email and password are required');
+        if (!location) throw new Error('Location is required');
+        // Firebase email registration
+        const { createUserWithEmailAndPassword, updateProfile } = await import('firebase/auth');
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        await updateProfile(user, { displayName: name });
+        // Prepare registration data
+        const regData = {
+          name,
+          email,
+          uid: user.uid,
+          role,
+          location,
+          vehicleType: role === 'transporter' ? vehicleType : undefined
+        };
+        const res = await registerFns[role](regData);
+        onLogin(res.user);
+        if (role === 'farmer') navigate('/farmer');
+        else if (role === 'retailer') navigate('/marketplace');
+        else navigate('/transporter');
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
   async function handleGoogleRegister() {
     setError('');
     setLoading(true);
@@ -213,15 +248,35 @@ export default function Register({ onLogin }) {
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">{t('createAccount')}</h1>
         </div>
 
-        {/* Registration Method Tabs */}
-        <div className="flex gap-2 mb-6">
-          <button className={`btn flex-1 ${method === 'google' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setMethod('google')} type="button">Register with Google</button>
-          <button className={`btn flex-1 ${method === 'otp' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setMethod('otp')} type="button">Register with Mobile & OTP</button>
+
+
+        {/* Google Registration - at top */}
+        <div className="my-6 flex flex-col items-center">
+          <button
+            type="button"
+            onClick={handleGoogleRegister}
+            className="btn btn-outline w-full text-lg py-3 flex items-center justify-center gap-2 mb-4"
+            disabled={loading}
+            style={{ maxWidth: 340 }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ marginRight: 8 }}><path d="M21.805 10.023h-9.765v3.977h5.588c-.241 1.285-1.03 2.377-2.199 3.093v2.572h3.548c2.078-1.916 3.298-4.74 2.828-7.642z" fill="#4285F4"/><path d="M12.04 21c2.47 0 4.541-.816 6.055-2.211l-3.548-2.572c-.984.661-2.24 1.054-3.507 1.054-2.695 0-4.98-1.818-5.797-4.267h-3.6v2.684c1.505 2.97 4.646 5.312 8.397 5.312z" fill="#34A853"/><path d="M6.243 13.004a5.996 5.996 0 0 1 0-3.008v-2.684h-3.6a9.003 9.003 0 0 0 0 8.376l3.6-2.684z" fill="#FBBC05"/><path d="M12.04 6.399c1.343 0 2.548.462 3.497 1.36l2.617-2.617c-1.514-1.395-3.585-2.142-6.114-2.142-3.751 0-6.892 2.342-8.397 5.312l3.6 2.684c.817-2.449 3.102-4.267 5.797-4.267z" fill="#EA4335"/></svg>
+            Sign up with Google
+          </button>
+          <div className="w-full flex items-center my-3">
+            <div className="flex-grow border-t border-gray-200"></div>
+            <span className="mx-3 text-gray-400 text-sm">or</span>
+            <div className="flex-grow border-t border-gray-200"></div>
+          </div>
         </div>
 
-        {/* Google Registration */}
-        {method === 'google' && (
-          <div className="card-static p-6 sm:p-8 space-y-5">
+        {/* Registration Method Tabs */}
+        <div className="flex gap-2 mb-6">
+          <button className={`btn flex-1 ${method === 'email' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setMethod('email')} type="button">Register with Email</button>
+          <button className={`btn flex-1 ${method === 'otp' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setMethod('otp')} type="button">Register with Mobile & OTP</button>
+        </div>
+        {/* Email Registration */}
+        {method === 'email' && (
+          <form onSubmit={handleEmailRegister} className="card-static p-6 sm:p-8 space-y-5">
             {/* Role */}
             <div>
               <label className="label">{t('iAmA')}</label>
@@ -236,6 +291,24 @@ export default function Register({ onLogin }) {
                   </button>
                 ))}
               </div>
+            </div>
+            {/* Name */}
+            <div>
+              <label className="label">{t('fullName')}</label>
+              <input className="input" placeholder={t('enterYourName')}
+                value={name} onChange={e => setName(e.target.value)} required />
+            </div>
+            {/* Email */}
+            <div>
+              <label className="label">Email</label>
+              <input type="email" className="input" placeholder="Enter your email"
+                value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+            {/* Password */}
+            <div>
+              <label className="label">Password</label>
+              <input type="password" className="input" placeholder="Enter password"
+                value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
             {/* Location */}
             <div>
@@ -280,17 +353,28 @@ export default function Register({ onLogin }) {
                 <span className="flex-shrink-0">⚠</span> {error}
               </div>
             )}
-            <button
-              type="button"
-              onClick={handleGoogleRegister}
-              className="btn btn-outline w-full text-lg py-3 flex items-center justify-center gap-2"
-              disabled={loading}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21.805 10.023h-9.765v3.977h5.588c-.241 1.285-1.03 2.377-2.199 3.093v2.572h3.548c2.078-1.916 3.298-4.74 2.828-7.642z" fill="#4285F4"/><path d="M12.04 21c2.47 0 4.541-.816 6.055-2.211l-3.548-2.572c-.984.661-2.24 1.054-3.507 1.054-2.695 0-4.98-1.818-5.797-4.267h-3.6v2.684c1.505 2.97 4.646 5.312 8.397 5.312z" fill="#34A853"/><path d="M6.243 13.004a5.996 5.996 0 0 1 0-3.008v-2.684h-3.6a9.003 9.003 0 0 0 0 8.376l3.6-2.684z" fill="#FBBC05"/><path d="M12.04 6.399c1.343 0 2.548.462 3.497 1.36l2.617-2.617c-1.514-1.395-3.585-2.142-6.114-2.142-3.751 0-6.892 2.342-8.397 5.312l3.6 2.684c.817-2.449 3.102-4.267 5.797-4.267z" fill="#EA4335"/></svg>
-              Continue with Google
+            <button type="submit" className="btn btn-primary w-full text-lg py-4" disabled={loading}>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" /> Registering...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <KeyRound className="w-5 h-5" /> Register
+                </span>
+              )}
             </button>
-          </div>
+            <p className="text-center text-sm text-gray-500">
+              Already registered?{' '}
+              <Link to="/login" className="text-primary-600 font-semibold hover:text-primary-700 transition-colors">
+                Sign In
+              </Link>
+            </p>
+          </form>
         )}
+
+
+
 
         {/* OTP Registration */}
         {method === 'otp' && step === 'details' && (

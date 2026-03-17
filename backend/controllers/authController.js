@@ -158,14 +158,28 @@ exports.updateFarmerProfile = async (req, res) => {
 
 exports.registerFarmer = async (req, res) => {
   try {
-    const { name, phone, location } = req.body;
-    if (!name || !phone || !location) {
-      return res.status(400).json({ error: 'name, phone, and location are required' });
+    const { name, phone, location, email, uid, photoURL } = req.body;
+    if (!name || !location) {
+      return res.status(400).json({ error: 'name and location are required' });
     }
-    const existing = await Farmer.findOne({ phone });
+    // Must have either phone or (email and uid)
+    if ((!phone || phone === '') && (!email || !uid)) {
+      return res.status(400).json({ error: 'Either phone or email+uid is required' });
+    }
+    let existing;
+    if (phone && phone !== '') {
+      existing = await Farmer.findOne({ phone });
+    } else if (email && uid) {
+      existing = await Farmer.findOne({ googleEmail: email, googleUid: uid });
+    }
     if (existing) return res.json({ message: 'Already registered', user: existing });
 
-    const farmer = await Farmer.create({ name, phone, location });
+    const farmerData = { name, location };
+    if (phone && phone !== '') farmerData.phone = phone;
+    if (email) farmerData.googleEmail = email;
+    if (uid) farmerData.googleUid = uid;
+    if (photoURL) farmerData.photoURL = photoURL;
+    const farmer = await Farmer.create(farmerData);
     res.status(201).json({ message: 'Farmer registered', user: farmer });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -174,14 +188,27 @@ exports.registerFarmer = async (req, res) => {
 
 exports.registerRetailer = async (req, res) => {
   try {
-    const { name, phone, location } = req.body;
-    if (!name || !phone || !location) {
-      return res.status(400).json({ error: 'name, phone, and location are required' });
+    const { name, phone, location, email, uid, photoURL } = req.body;
+    if (!name || !location) {
+      return res.status(400).json({ error: 'name and location are required' });
     }
-    const existing = await Retailer.findOne({ phone });
+    if ((!phone || phone === '') && (!email || !uid)) {
+      return res.status(400).json({ error: 'Either phone or email+uid is required' });
+    }
+    let existing;
+    if (phone && phone !== '') {
+      existing = await Retailer.findOne({ phone });
+    } else if (email && uid) {
+      existing = await Retailer.findOne({ googleEmail: email, googleUid: uid });
+    }
     if (existing) return res.json({ message: 'Already registered', user: existing });
 
-    const retailer = await Retailer.create({ name, phone, location });
+    const retailerData = { name, location };
+    if (phone && phone !== '') retailerData.phone = phone;
+    if (email) retailerData.googleEmail = email;
+    if (uid) retailerData.googleUid = uid;
+    if (photoURL) retailerData.photoURL = photoURL;
+    const retailer = await Retailer.create(retailerData);
     res.status(201).json({ message: 'Retailer registered', user: retailer });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -190,14 +217,27 @@ exports.registerRetailer = async (req, res) => {
 
 exports.registerTransporter = async (req, res) => {
   try {
-    const { name, phone, location, vehicleType } = req.body;
-    if (!name || !phone || !location) {
-      return res.status(400).json({ error: 'name, phone, and location are required' });
+    const { name, phone, location, vehicleType, email, uid, photoURL } = req.body;
+    if (!name || !location) {
+      return res.status(400).json({ error: 'name and location are required' });
     }
-    const existing = await Transporter.findOne({ phone });
+    if ((!phone || phone === '') && (!email || !uid)) {
+      return res.status(400).json({ error: 'Either phone or email+uid is required' });
+    }
+    let existing;
+    if (phone && phone !== '') {
+      existing = await Transporter.findOne({ phone });
+    } else if (email && uid) {
+      existing = await Transporter.findOne({ googleEmail: email, googleUid: uid });
+    }
     if (existing) return res.json({ message: 'Already registered', user: existing });
 
-    const transporter = await Transporter.create({ name, phone, location, vehicleType });
+    const transporterData = { name, location, vehicleType };
+    if (phone && phone !== '') transporterData.phone = phone;
+    if (email) transporterData.googleEmail = email;
+    if (uid) transporterData.googleUid = uid;
+    if (photoURL) transporterData.photoURL = photoURL;
+    const transporter = await Transporter.create(transporterData);
     res.status(201).json({ message: 'Transporter registered', user: transporter });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -206,18 +246,35 @@ exports.registerTransporter = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { phone, role } = req.body;
-    if (!phone || !role) {
-      return res.status(400).json({ error: 'phone and role are required' });
+    const { phone, role, uid, email } = req.body;
+    let user = null;
+    let foundRole = role;
+    // Login by phone (OTP flow)
+    if (phone && role) {
+      if (role === 'farmer') user = await Farmer.findOne({ phone });
+      else if (role === 'retailer') user = await Retailer.findOne({ phone });
+      else if (role === 'transporter') user = await Transporter.findOne({ phone });
+      else return res.status(400).json({ error: 'Invalid role' });
     }
-    let user;
-    if (role === 'farmer') user = await Farmer.findOne({ phone });
-    else if (role === 'retailer') user = await Retailer.findOne({ phone });
-    else if (role === 'transporter') user = await Transporter.findOne({ phone });
-    else return res.status(400).json({ error: 'Invalid role' });
-
+    // Login by uid/email (email/password or Google)
+    else if (uid && email) {
+      // Try to find user in all roles
+      let found = await Farmer.findOne({ googleUid: uid, googleEmail: email });
+      if (found) { user = found; foundRole = 'farmer'; }
+      if (!user) {
+        found = await Retailer.findOne({ googleUid: uid, googleEmail: email });
+        if (found) { user = found; foundRole = 'retailer'; }
+      }
+      if (!user) {
+        found = await Transporter.findOne({ googleUid: uid, googleEmail: email });
+        if (found) { user = found; foundRole = 'transporter'; }
+      }
+      if (!user) return res.status(404).json({ error: 'User not found. Please register.' });
+    } else {
+      return res.status(400).json({ error: 'phone+role or uid+email required' });
+    }
     if (!user) return res.status(404).json({ error: 'User not found. Please register.' });
-    res.json({ message: 'Login successful', user });
+    res.json({ message: 'Login successful', user, role: foundRole });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -1,3 +1,6 @@
+// Retailer Crops
+export const getRecommendedCrops = (retailerId) => request(`/crops/recommended/${retailerId}`);
+export const getAllCrops = () => request('/crops/all');
 export const verifyDeliveryOtp = (orderId, otp) => request(`/orders/${orderId}/verify-otp`, { method: 'POST', body: { otp } });
 // Google Auth
 export const googleRegister = (data) => request('/auth/google/register', { method: 'POST', body: data });
@@ -37,11 +40,13 @@ export const updateRetailerProfile = (id, data) => request(`/auth/profile/retail
 // Crops
 export const addCrop = (data) => request('/crops/add', { method: 'POST', body: data });
 export const getFarmerCrops = (farmerId) => request(`/crops/farmer/${farmerId}`);
+export const deleteCrop = (cropId) => request(`/crops/${cropId}`, { method: 'DELETE' });
 export const getMarketplaceCrops = (params = {}) => {
   const q = new URLSearchParams(params).toString();
   return request(`/crops/marketplace${q ? '?' + q : ''}`);
 };
 export const syncCrops = (crops) => request('/crops/sync', { method: 'POST', body: { crops } });
+export const updateCrop = (cropId, data) => request(`/crops/${cropId}`, { method: 'PUT', body: data });
 
 // Orders
 export const createOrder = (data) => request('/orders/create', { method: 'POST', body: data });
