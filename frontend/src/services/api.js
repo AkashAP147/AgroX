@@ -5,7 +5,12 @@ export const googleLogin = (data) => request('/auth/google/login', { method: 'PO
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 async function request(url, options = {}) {
-  const res = await fetch(API_BASE + url, {
+  // Ensure all API routes are prefixed with /api
+  let fullUrl = API_BASE + url;
+  if (!fullUrl.includes('/api/')) {
+    fullUrl = API_BASE + '/api' + url;
+  }
+  const res = await fetch(fullUrl, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined
