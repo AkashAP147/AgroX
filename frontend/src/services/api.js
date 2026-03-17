@@ -2,7 +2,7 @@ export const verifyDeliveryOtp = (orderId, otp) => request(`/orders/${orderId}/v
 // Google Auth
 export const googleRegister = (data) => request('/auth/google/register', { method: 'POST', body: data });
 export const googleLogin = (data) => request('/auth/google/login', { method: 'POST', body: data });
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 async function request(url, options = {}) {
   const res = await fetch(API_BASE + url, {
