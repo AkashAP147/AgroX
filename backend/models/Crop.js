@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const cropSchema = new mongoose.Schema({
   cropName: { type: String, required: true, trim: true },
-  quantity: { type: Number, required: true, min: 1 },
+  quantity: { type: Number, required: true, min: 0 },
   quantityUnit: { type: String, enum: ['kg', 'quintal', 'ton', 'bag', 'crate'], default: 'kg' },
   price: { type: Number, required: true, min: 0 },
   farmerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Farmer', required: true },

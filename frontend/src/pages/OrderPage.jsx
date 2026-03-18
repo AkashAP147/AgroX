@@ -14,6 +14,7 @@ export default function OrderPage({ user }) {
   const navigate = useNavigate();
 
   const [quantity, setQuantity] = useState('');
+    const [quantityError, setQuantityError] = useState('');
   const [dropLocation, setDropLocation] = useState(user?.location || '');
   const [dropCoordinates, setDropCoordinates] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -90,8 +91,13 @@ export default function OrderPage({ user }) {
 
   async function handleOrder(e) {
     e.preventDefault();
+    setQuantityError('');
     if (!dropCoordinates) {
       setMessage('Please pick the delivery location on the map for correct navigation.');
+      return;
+    }
+    if (Number(quantity) < 1 || Number(quantity) > crop.quantity) {
+      setQuantityError(`Please select a quantity between 1 and ${crop.quantity}`);
       return;
     }
     setLoading(true);
@@ -279,8 +285,20 @@ export default function OrderPage({ user }) {
           <div>
             <label className="label">{t('quantity')} ({unit})</label>
             <input type="number" className="input" placeholder={t('howMuch')}
-              value={quantity} onChange={e => setQuantity(e.target.value)}
+              value={quantity}
+              onChange={e => {
+                let val = e.target.value;
+                if (val === '') {
+                  setQuantity('');
+                  setQuantityError('');
+                  return;
+                }
+                val = Math.max(1, Math.min(Number(val), crop.quantity));
+                setQuantity(val);
+                setQuantityError(val > crop.quantity ? `Max available is ${crop.quantity}` : '');
+              }}
               min="1" max={crop.quantity} required />
+            {quantityError && <p className="text-xs text-red-600 mt-1.5">{quantityError}</p>}
             <p className="text-xs text-gray-400 mt-1.5">{t('maxAvailable')} {crop.quantity} {unit}</p>
           </div>
           <div>

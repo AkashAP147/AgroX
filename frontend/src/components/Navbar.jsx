@@ -344,7 +344,7 @@ export default function Navbar({ user, onLogout, onUpdateUser }) {
                         onClick={() => {
                           onLogout();
                           setSettingsOpen(false);
-                          navigate('/login');
+                          navigate('/');
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
                       >
@@ -494,7 +494,11 @@ export default function Navbar({ user, onLogout, onUpdateUser }) {
                       )}
                     </div>
                   )}
-                  <button onClick={() => { onLogout(); setMenuOpen(false); }}
+                  <button onClick={() => {
+                    onLogout();
+                    setMenuOpen(false);
+                    navigate('/');
+                  }}
                     className="w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2">
                     <LogOut className="w-4 h-4" /> {t('logout')}
                   </button>
