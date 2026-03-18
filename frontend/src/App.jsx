@@ -62,7 +62,7 @@ export default function App() {
           {/* Farmer routes */}
           <Route path="/farmer" element={
             <ProtectedRoute user={user} role="farmer">
-              <FarmerDashboard user={user} />
+              <FarmerDashboard user={user} onUpdateUser={updateUser} />
             </ProtectedRoute>
           } />
           <Route path="/farmer/add-crop" element={
@@ -82,7 +82,7 @@ export default function App() {
           } />
 
           {/* Retailer routes */}
-          <Route path="/marketplace" element={<Marketplace user={user} />} />
+          <Route path="/marketplace" element={<Marketplace user={user} onUpdateUser={updateUser} />} />
           <Route path="/order/:cropId" element={
             <ProtectedRoute user={user} role="retailer">
               <OrderPage user={user} />

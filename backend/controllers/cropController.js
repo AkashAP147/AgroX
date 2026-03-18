@@ -31,13 +31,36 @@ exports.getRecommendedCrops = async (req, res) => {
   try {
     const { retailerId } = req.params;
     if (!retailerId) return res.status(400).json({ error: 'Retailer ID required' });
-    // Find retailer location
+    // Find retailer location and coordinates
     const Retailer = require('../models/Retailer');
     const retailer = await Retailer.findById(retailerId);
     if (!retailer) return res.status(404).json({ error: 'Retailer not found' });
-    // Recommend crops in same location (city/village match)
-    const crops = await Crop.find({ location: new RegExp('^' + retailer.location, 'i'), status: 'available', availableUntil: { $gte: new Date() } }).sort({ createdAt: -1 }).lean();
-    res.json(crops);
+    if (!retailer.coordinates || typeof retailer.coordinates.lat !== 'number' || typeof retailer.coordinates.lng !== 'number') {
+      return res.status(400).json({ error: 'Retailer coordinates not set' });
+    }
+    // Get all available crops
+    const crops = await Crop.find({ status: 'available', availableUntil: { $gte: new Date() } }).lean();
+    // Haversine formula
+    function haversineDistanceKm(a, b) {
+      const R = 6371;
+      const dLat = (b.lat - a.lat) * (Math.PI / 180);
+      const dLon = (b.lng - a.lng) * (Math.PI / 180);
+      const lat1 = a.lat * (Math.PI / 180);
+      const lat2 = b.lat * (Math.PI / 180);
+      const x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+      return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
+    }
+    // Filter crops within 100km and attach distance (using crop coordinates)
+    const recommended = crops
+      .map(crop => {
+        if (!crop.coordinates || typeof crop.coordinates.lat !== 'number' || typeof crop.coordinates.lng !== 'number') return null;
+        const dist = haversineDistanceKm(retailer.coordinates, crop.coordinates);
+        return dist <= 100 ? { ...crop, distanceKm: dist } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+    res.json(recommended);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -72,10 +95,23 @@ exports.addCrop = async (req, res) => {
     if (existing) {
       return res.status(409).json({ error: 'This crop is already listed and available.' });
     }
+
+    // Determine coordinates: use provided coords, or fallback to farmer's most recent crop coords
+    let cropCoords = coordinates;
+    if (!cropCoords || typeof cropCoords.lat !== 'number' || typeof cropCoords.lng !== 'number') {
+      const latestCrop = await Crop.findOne({ farmerId, 'coordinates.lat': { $ne: 20.5937 } })
+        .sort({ createdAt: -1 }).lean();
+      if (latestCrop && latestCrop.coordinates) {
+        cropCoords = latestCrop.coordinates;
+      } else {
+        cropCoords = null; // No valid fallback available
+      }
+    }
+
     const crop = await Crop.create({
       cropName, quantity, quantityUnit: quantityUnit || 'kg', price, farmerId, farmerName,
       location, availableUntil,
-      coordinates: coordinates || { lat: 20.5937, lng: 78.9629 },
+      coordinates: cropCoords || { lat: 20.5937, lng: 78.9629 },
       image: image || null
     });
     res.status(201).json({ message: 'Crop added', crop });
@@ -96,16 +132,16 @@ exports.getFarmerCrops = async (req, res) => {
 
 exports.getAllCrops = async (req, res) => {
   try {
-    const { cropName, minPrice, maxPrice, location } = req.query;
+    const { cropName, minPrice, maxPrice, location, retailerLat, retailerLng } = req.query;
     const filter = { status: 'available', availableUntil: { $gte: new Date() } };
-    if (cropName) filter.cropName = new RegExp('^' + cropName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    if (location) filter.location = new RegExp('^' + location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    if (cropName) filter.cropName = new RegExp('^' + cropName.replace(/[.*+?^${}()|[\]\\]/g, '\$&'), 'i');
+    if (location) filter.location = new RegExp('^' + location.replace(/[.*+?^${}()|[\]\\]/g, '\$&'), 'i');
     if (minPrice || maxPrice) {
       filter.price = {};
       if (minPrice) filter.price.$gte = Number(minPrice);
       if (maxPrice) filter.price.$lte = Number(maxPrice);
     }
-    const crops = await Crop.find(filter).sort({ createdAt: -1 }).lean();
+    let crops = await Crop.find(filter).sort({ createdAt: -1 }).lean();
 
     // Attach farmer rating data
     const farmerIds = [...new Set(crops.map(c => c.farmerId?.toString()).filter(Boolean))];
@@ -118,6 +154,28 @@ exports.getAllCrops = async (req, res) => {
       c.farmerTotalRatings = f?.totalRatings || 0;
     });
 
+    // If retailer coordinates are provided, filter and sort by distance using crop coordinates
+    if (retailerLat && retailerLng) {
+      function haversineDistanceKm(a, b) {
+        const R = 6371;
+        const dLat = (b.lat - a.lat) * (Math.PI / 180);
+        const dLon = (b.lng - a.lng) * (Math.PI / 180);
+        const lat1 = a.lat * (Math.PI / 180);
+        const lat2 = b.lat * (Math.PI / 180);
+        const x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+        return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
+      }
+      const coords = { lat: parseFloat(retailerLat), lng: parseFloat(retailerLng) };
+      crops = crops
+        .map(crop => {
+          if (!crop.coordinates || typeof crop.coordinates.lat !== 'number' || typeof crop.coordinates.lng !== 'number') return null;
+          const dist = haversineDistanceKm(coords, crop.coordinates);
+          return dist <= 100 ? { ...crop, distanceKm: dist } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.distanceKm - b.distanceKm);
+    }
     res.json(crops);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -141,6 +141,15 @@ export default function AddCrop({ user }) {
     setLoading(true);
     setMessage('');
 
+    // Validate availableUntil is in the future
+    const now = new Date();
+    const availableUntilDate = new Date(form.availableUntil);
+    if (!form.availableUntil || isNaN(availableUntilDate.getTime()) || availableUntilDate <= now) {
+      setLoading(false);
+      setMessage('error:Please select a future date and time for availability.');
+      return;
+    }
+
     const cropData = {
       cropName: form.cropName === 'Other' ? customCrop : form.cropName,
       quantity: Number(form.quantity),
@@ -408,12 +417,14 @@ export default function AddCrop({ user }) {
           )}
         </div>
 
-        {/* Available Until */}
+        {/* Available Until (Date & Time) */}
         <div>
           <label className="label">{t('availableUntil')}</label>
-          <input type="date" className="input"
-            value={form.availableUntil} onChange={e => update('availableUntil', e.target.value)}
-            min={new Date().toISOString().split('T')[0]} required />
+          <input type="datetime-local" className="input"
+            value={form.availableUntil}
+            onChange={e => update('availableUntil', e.target.value)}
+            min={new Date().toISOString().slice(0, 16)} required />
+          <p className="text-xs text-gray-500 mt-1">Specify the date and time until which this crop is available for pickup today.</p>
         </div>
 
         {/* Price Preview */}

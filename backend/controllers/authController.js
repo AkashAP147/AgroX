@@ -141,13 +141,14 @@ exports.verifyOTP = async (req, res) => {
 exports.updateFarmerProfile = async (req, res) => {
   try {
     const { id } = req.params;
-    const { upiId, upiQr, phone, name, photoURL } = req.body;
+    const { upiId, upiQr, phone, name, photoURL, location } = req.body;
     const update = {};
     if (upiId !== undefined) update.upiId = upiId.trim();
     if (upiQr !== undefined) update.upiQr = upiQr;
     if (phone !== undefined) update.phone = phone;
     if (name !== undefined) update.name = name;
     if (photoURL !== undefined) update.photoURL = photoURL;
+    if (location !== undefined) update.location = location;
     const farmer = await Farmer.findByIdAndUpdate(id, update, { new: true });
     if (!farmer) return res.status(404).json({ error: 'Farmer not found' });
     res.json({ message: 'Profile updated', user: farmer });

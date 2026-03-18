@@ -120,7 +120,8 @@ export default function FarmerDashboard({ user, onUpdateUser }) {
       try {
         const { latitude, longitude } = position.coords;
         const address = await reverseGeocode(latitude, longitude);
-        const updated = await updateFarmerProfile(user._id, { ...user, location: address });
+        // Only send location field to update, not the whole user object
+        const updated = await updateFarmerProfile(user._id, { location: address });
         if (onUpdateUser) onUpdateUser(updated.user);
       } catch (err) {
         setLocationError('Failed to update location');
