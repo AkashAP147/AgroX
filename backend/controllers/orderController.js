@@ -137,15 +137,13 @@ exports.payOrder = async (req, res) => {
 
     // Find the linked delivery to get transporter info
     const delivery = await Delivery.findOne({ orderId: order._id });
-
-    // Generate OTP for delivery confirmation (6 digits)
+    // No OTP generation for farmer. If OTP is needed, generate and send only to retailer elsewhere.
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     order.otp = otp;
     order.paymentStatus = 'paid';
     order.paidAt = new Date();
     await order.save();
 
-    // TODO: Send OTP to retailer (SMS/notification) if needed
     // Retailer pays once; no separate transporter payment needed.
     const farmerPayout = Math.round(order.totalPrice * 0.85);
     const transporterPayout = Math.round(order.totalPrice * 0.10);

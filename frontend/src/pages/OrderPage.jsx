@@ -250,7 +250,7 @@ export default function OrderPage({ user }) {
               <div className="flex gap-3">
                 <button
                   onClick={() => {
-                    const msg = `🌾 *New Order from AgroX!*\n\nHello ${farmerName || 'Farmer'},\n*${user.name}* has placed an order.\n\n📦 *Crop:* ${crop.cropName}\n📊 *Qty:* ${quantity} ${unit}\n💰 *Price:* ₹${crop.price}/${unit}\n💵 *Total:* ₹${total.toLocaleString('en-IN')}\n\n🏪 *Retailer:* ${user.name}\n📞 *Contact:* +91${user.phone || ''}\n📍 *Deliver to:* ${dropLocation}\n\n🔔 Please accept/reject this order in the AgroX app.`;
+                    const msg = `🌾 *Order Confirmed on AgroX!*\n\nHello ${farmerName || 'Akash Patil'},\n*${user.name}* has placed and paid for an order.\n\n📦 *Crop:* ${crop.cropName}\n📊 *Qty:* ${quantity} ${unit}\n💰 *Price:* ₹${crop.price}/${unit}\n💵 *Total Paid:* ₹${total.toLocaleString('en-IN')}\n\n🏪 *Retailer:* ${user.name}\n📞 *Contact:* +91${user.phone || ''}\n📍 *Deliver to:* ${dropLocation}\n\n✅ Please prepare the order for delivery. You will be paid after successful delivery confirmation.`;
                     window.open(`https://wa.me/91${farmerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
                     setNotifySent(true);
                   }}
@@ -260,7 +260,7 @@ export default function OrderPage({ user }) {
                 </button>
                 <button
                   onClick={() => {
-                    const msg = `New Order from AgroX! ${user.name} ordered ${quantity} ${unit} of ${crop.cropName} at Rs.${crop.price}/${unit}. Total: Rs.${total}. Deliver to: ${dropLocation}. Contact retailer: +91${user.phone || ''}. Accept/reject in AgroX app.`;
+                    const msg = `Order Confirmed on AgroX! ${user.name} has placed and paid for an order: ${quantity} ${unit} of ${crop.cropName} at Rs.${crop.price}/${unit}. Total Paid: Rs.${total}. Deliver to: ${dropLocation}. Retailer contact: +91${user.phone || ''}. Please prepare the order for delivery. You will be paid after successful delivery confirmation.`;
                     window.open(`sms:+91${farmerPhone}?body=${encodeURIComponent(msg)}`, '_self');
                     setNotifySent(true);
                   }}
