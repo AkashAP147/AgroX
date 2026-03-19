@@ -51,16 +51,45 @@ exports.acceptDelivery = async (req, res) => {
 exports.updateDeliveryStatus = async (req, res) => {
   try {
     const { deliveryId } = req.params;
-    const { status } = req.body;
+    const { status, pickupOtp } = req.body;
     const valid = ['pending', 'accepted', 'in-transit', 'delivered'];
     if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
-    const delivery = await Delivery.findByIdAndUpdate(deliveryId, { deliveryStatus: status }, { new: true });
+    const delivery = await Delivery.findById(deliveryId);
     if (!delivery) return res.status(404).json({ error: 'Delivery not found' });
 
-    if (status === 'delivered') {
-      await Order.findByIdAndUpdate(delivery.orderId, { status: 'delivered' });
+    // If moving to in-transit, require OTP from farmer
+    if (status === 'in-transit') {
+      // If no pickupOtp exists, generate and save it (should be sent to farmer)
+      if (!delivery.pickupOtp) {
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        delivery.pickupOtp = otp;
+        await delivery.save();
+        return res.status(200).json({ message: 'Pickup OTP generated. Share with farmer.', pickupOtp: otp });
+      }
+      // If pickupOtp exists, require it from transporter
+      if (!pickupOtp) {
+        return res.status(400).json({ error: 'Pickup OTP required from farmer.' });
+      }
+      if (pickupOtp !== delivery.pickupOtp) {
+        return res.status(400).json({ error: 'Invalid Pickup OTP.' });
+      }
+      delivery.deliveryStatus = 'in-transit';
+      await delivery.save();
+      return res.json({ message: 'Transit started', delivery });
     }
+
+    // If moving to delivered, update order as well
+    if (status === 'delivered') {
+      delivery.deliveryStatus = 'delivered';
+      await delivery.save();
+      await Order.findByIdAndUpdate(delivery.orderId, { status: 'delivered' });
+      return res.json({ message: 'Delivery updated', delivery });
+    }
+
+    // For other statuses
+    delivery.deliveryStatus = status;
+    await delivery.save();
     res.json({ message: 'Delivery updated', delivery });
   } catch (err) {
     res.status(500).json({ error: err.message });

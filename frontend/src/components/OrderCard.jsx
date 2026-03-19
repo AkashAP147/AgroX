@@ -1,4 +1,5 @@
-import { Package, IndianRupee, Store, CreditCard, Clock, CheckCircle2, XCircle, Truck, CircleDollarSign } from 'lucide-react';
+import { Package, IndianRupee, Store, CreditCard, Clock, CheckCircle2, XCircle, Truck, CircleDollarSign, Star } from 'lucide-react';
+import StarRating from './StarRating';
 
 const STATUS_STYLES = {
   pending: 'badge-yellow',
@@ -20,12 +21,15 @@ const STATUS_ICONS = {
   unpaid: Clock
 };
 
-export default function OrderCard({ order, actions, showOtp = true }) {
+
+export default function OrderCard({ order, actions, showOtp = true, deliveryOtp, pickupOtp, rating, rated, ratingOpen, onOpenRating, onCloseRating, onSubmitRating, ratingLoading, t, onClick }) {
   const StatusIcon = STATUS_ICONS[order.status] || Clock;
+  // Prefer pickupOtp prop if provided, else fallback to order.pickupOtp
+  const effectivePickupOtp = pickupOtp !== undefined ? pickupOtp : order.pickupOtp;
 
   return (
-    <div className="card group hover:-translate-y-1 transition-all duration-300">
-      {/* Header */}
+    <div className="card group transition-all duration-300 cursor-pointer" onClick={onClick}>
+      {/* Header with status badge for farmer */}
       <div className="flex justify-between items-start mb-3">
         <div>
           <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary-700 transition-colors">
@@ -37,7 +41,8 @@ export default function OrderCard({ order, actions, showOtp = true }) {
             })}
           </p>
         </div>
-        <span className={`badge ${STATUS_STYLES[order.status] || 'badge-yellow'}`}>
+        <span className={`badge ${STATUS_STYLES[order.status] || 'badge-yellow'}`}
+          title={order.status.charAt(0).toUpperCase() + order.status.slice(1)}>
           <StatusIcon className="w-3 h-3 inline -mt-0.5 mr-0.5" /> {order.status}
         </span>
       </div>
@@ -68,10 +73,18 @@ export default function OrderCard({ order, actions, showOtp = true }) {
 
       {order.paymentStatus === 'paid' && (
         <>
-          {showOtp && (
-            <div className="mb-2 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs text-emerald-900">
-              <p className="font-semibold text-base text-center tracking-widest">Delivery OTP: <span className="text-lg font-mono">{order.otp || 'N/A'}</span></p>
-              <p className="text-xs text-gray-500 text-center mt-1">Share this OTP with the transporter to receive your order.</p>
+          {/* Always show Pickup OTP for farmer if available and not delivered */}
+          {showOtp && effectivePickupOtp && order.status !== 'delivered' && (
+            <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs text-blue-900">
+              <p className="font-semibold text-base text-center tracking-widest">Pickup OTP: <span className="text-lg font-mono">{effectivePickupOtp || 'N/A'}</span></p>
+              <p className="text-xs text-gray-500 text-center mt-1">Share this OTP with the transporter to start the pickup.</p>
+            </div>
+          )}
+          {/* Show Delivery OTP for retailer if available and order is shipped but not delivered */}
+          {showOtp && deliveryOtp && order.status === 'shipped' && (
+            <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs text-blue-900">
+              <p className="font-semibold text-base text-center tracking-widest">Delivery OTP: <span className="text-lg font-mono">{deliveryOtp || 'N/A'}</span></p>
+              <p className="text-xs text-gray-500 text-center mt-1">Share this OTP with the transporter to confirm delivery.</p>
             </div>
           )}
           <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-800">
@@ -82,12 +95,58 @@ export default function OrderCard({ order, actions, showOtp = true }) {
         </>
       )}
 
+      {/* Rating section inside card */}
+      {rating && (
+        <div className="mt-2">
+          {rated ? (
+            <div className="card-static p-3 bg-amber-50/60 border-amber-100">
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                <span className="text-sm font-semibold text-gray-700">{t('yourRating')}</span>
+              </div>
+              <StarRating value={rated.rating} totalRatings={1} compact />
+              {rated.comment && (
+                <p className="text-xs text-gray-500 mt-1.5 italic">"{rated.comment}"</p>
+              )}
+            </div>
+          ) : ratingOpen ? (
+            <div className="card-static p-4 border-2 border-amber-200 bg-amber-50/30">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                  <Star className="w-4 h-4 text-amber-500" /> {t('rateFarmer')}
+                </h4>
+                <button
+                  type="button"
+                  onClick={onCloseRating}
+                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+              <StarRating
+                editable
+                loading={ratingLoading}
+                onSubmit={onSubmitRating}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenRating}
+              className="btn btn-outline w-full text-sm py-2.5 flex items-center justify-center gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+            >
+              <Star className="w-4 h-4" /> {t('rateFarmer')}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Actions */}
       {actions && (
         <div className="flex gap-2 mt-1 flex-wrap">
           {actions.map((a, i) => (
             <button key={i} onClick={() => a.onClick(order)}
-              className={`btn text-sm py-2 px-4 flex-1 ${a.className || 'btn-primary'}`}>
+              className={`btn text-sm py-2 px-4 flex-1 ${a.className || 'btn-primary'}`}> 
               {a.label}
             </button>
           ))}

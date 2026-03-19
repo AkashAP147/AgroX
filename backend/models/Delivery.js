@@ -19,6 +19,7 @@ const deliverySchema = new mongoose.Schema({
     enum: ['pending', 'accepted', 'in-transit', 'delivered'],
     default: 'pending'
   },
+  pickupOtp: { type: String }, // OTP for pickup confirmation from farmer
   createdAt: { type: Date, default: Date.now }
 });
 

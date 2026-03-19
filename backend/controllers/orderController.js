@@ -137,7 +137,15 @@ exports.payOrder = async (req, res) => {
 
     // Find the linked delivery to get transporter info
     const delivery = await Delivery.findOne({ orderId: order._id });
-    // No OTP generation for farmer. If OTP is needed, generate and send only to retailer elsewhere.
+
+    // Generate and save pickupOtp for farmer if not already present
+    if (delivery && !delivery.pickupOtp) {
+      const pickupOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      delivery.pickupOtp = pickupOtp;
+      await delivery.save();
+    }
+
+    // Generate and save delivery OTP for retailer
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     order.otp = otp;
     order.paymentStatus = 'paid';

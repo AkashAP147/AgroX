@@ -56,7 +56,7 @@ export default function TransporterDashboard({ user }) {
   const [loading, setLoading] = useState(true);
   const [previewMaps, setPreviewMaps] = useState({});
   const [expandedJob, setExpandedJob] = useState(null); // job _id for which map is shown
-  const [otpModal, setOtpModal] = useState({ open: false, delivery: null, otp: '', error: '', loading: false });
+  const [otpModal, setOtpModal] = useState({ open: false, delivery: null, otp: '', error: '', loading: false, type: null });
 
   useEffect(() => { loadAll(); }, []);
 
@@ -80,13 +80,19 @@ export default function TransporterDashboard({ user }) {
     } catch (err) { alert(err.message); }
   }
 
+
+  // New: handle pickup OTP for starting transit
   async function handleStatusUpdate(delivery, status) {
     if (status === 'delivered') {
-      setOtpModal({ open: true, delivery, otp: '', error: '', loading: false });
+      setOtpModal({ open: true, delivery, otp: '', error: '', loading: false, type: 'delivery' });
+      return;
+    }
+    if (status === 'in-transit') {
+      setOtpModal({ open: true, delivery, otp: '', error: '', loading: false, type: 'pickup' });
       return;
     }
     try {
-      await updateDeliveryStatus(delivery._id, status);
+      await updateDeliveryStatus(delivery._id, { status });
       loadAll();
     } catch (err) { alert(err.message); }
   }
@@ -94,6 +100,14 @@ export default function TransporterDashboard({ user }) {
   async function handleOtpSubmit() {
     setOtpModal(m => ({ ...m, loading: true, error: '' }));
     try {
+      if (otpModal.type === 'pickup') {
+        // Start transit: send pickupOtp
+        await updateDeliveryStatus(otpModal.delivery._id, { status: 'in-transit', pickupOtp: otpModal.otp });
+        setOtpModal({ open: false, delivery: null, otp: '', error: '', loading: false });
+        loadAll();
+        return;
+      }
+      // Delivery OTP (existing logic)
       const orderId = otpModal.delivery.orderId?._id || otpModal.delivery.orderId;
       await verifyDeliveryOtp(orderId, otpModal.otp);
       setOtpModal({ open: false, delivery: null, otp: '', error: '', loading: false });
@@ -185,31 +199,8 @@ export default function TransporterDashboard({ user }) {
         </button>
       </div>
 
-      {/* OTP Modal */}
-      {otpModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-xs animate-fade-in">
-            <h2 className="text-lg font-bold mb-2 text-center">Enter Delivery OTP</h2>
-            <p className="text-gray-500 text-sm mb-4 text-center">Ask the retailer for the 6-digit OTP to complete delivery.</p>
-            <input
-              className="input w-full mb-2 text-center tracking-widest text-lg"
-              placeholder="Enter OTP"
-              value={otpModal.otp}
-              onChange={e => setOtpModal(m => ({ ...m, otp: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
-              maxLength={6}
-              disabled={otpModal.loading}
-              autoFocus
-            />
-            {otpModal.error && <div className="text-red-600 text-xs mb-2 text-center">{otpModal.error}</div>}
-            <div className="flex gap-2 mt-2">
-              <button className="btn btn-secondary flex-1" onClick={() => setOtpModal({ open: false, delivery: null, otp: '', error: '', loading: false })} disabled={otpModal.loading}>Cancel</button>
-              <button className="btn btn-primary flex-1" onClick={handleOtpSubmit} disabled={otpModal.loading || otpModal.otp.length !== 6}>
-                {otpModal.loading ? 'Verifying...' : 'Confirm Delivery'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Inline OTP Modal (for pickup and delivery) inside the relevant order card */}
+
 
       {/* Content */}
       {loading ? (
@@ -321,6 +312,7 @@ export default function TransporterDashboard({ user }) {
               const StatusIcon = STATUS_ICONS[d.deliveryStatus] || Clock;
               const isDelivered = d.deliveryStatus === 'delivered';
               const showMap = !isDelivered || previewMaps[d._id];
+              const showOtpInline = otpModal.open && otpModal.delivery && otpModal.delivery._id === d._id;
               return (
                 <div key={d._id} className="card animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
                   {/* Header with order time */}
@@ -391,25 +383,55 @@ export default function TransporterDashboard({ user }) {
                     </div>
                   )}
 
-                  {/* Status actions */}
-                  <div className="flex gap-2">
-                    {d.deliveryStatus === 'accepted' && (
-                      <button onClick={() => handleStatusUpdate(d, 'in-transit')}
-                        className="btn btn-secondary flex-1">
-                        <Navigation className="w-4 h-4" /> {t('startTransit')}
-                      </button>
-                    )}
-                    {d.deliveryStatus === 'in-transit' && (
-                      <button onClick={() => handleStatusUpdate(d, 'delivered')}
-                        className="btn btn-primary flex-1">
-                        <CheckCircle2 className="w-4 h-4" /> {t('markDelivered')}
-                      </button>
-                    )}
-                    {d.deliveryStatus === 'delivered' && (
-                      <div className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-emerald-50 text-emerald-700 font-semibold text-sm">
-                        <CheckCircle2 className="w-4 h-4" /> {t('deliveryCompleted')}
+                  {/* Status actions and inline OTP input */}
+                  <div className="flex flex-col gap-2">
+                    {showOtpInline && (
+                      <div className="mb-2 rounded-xl border border-primary-200 bg-primary-50/80 p-4">
+                        <h2 className="text-lg font-bold mb-2 text-center">
+                          {otpModal.type === 'pickup' ? 'Enter Pickup OTP' : 'Enter Delivery OTP'}
+                        </h2>
+                        <p className="text-gray-500 text-sm mb-4 text-center">
+                          {otpModal.type === 'pickup'
+                            ? 'Ask the farmer for the 6-digit OTP to start transit.'
+                            : 'Ask the retailer for the 6-digit OTP to complete delivery.'}
+                        </p>
+                        <input
+                          className="input w-full mb-2 text-center tracking-widest text-lg"
+                          placeholder="Enter OTP"
+                          value={otpModal.otp}
+                          onChange={e => setOtpModal(m => ({ ...m, otp: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                          maxLength={6}
+                          disabled={otpModal.loading}
+                          autoFocus
+                        />
+                        {otpModal.error && <div className="text-red-600 text-xs mb-2 text-center">{otpModal.error}</div>}
+                        <div className="flex gap-2 mt-2">
+                          <button className="btn btn-secondary flex-1" onClick={() => setOtpModal({ open: false, delivery: null, otp: '', error: '', loading: false, type: null })} disabled={otpModal.loading}>Cancel</button>
+                          <button className="btn btn-primary flex-1" onClick={handleOtpSubmit} disabled={otpModal.loading || otpModal.otp.length !== 6}>
+                            {otpModal.loading ? (otpModal.type === 'pickup' ? 'Verifying...' : 'Verifying...') : (otpModal.type === 'pickup' ? 'Start Transit' : 'Confirm Delivery')}
+                          </button>
+                        </div>
                       </div>
                     )}
+                    <div className="flex gap-2">
+                      {d.deliveryStatus === 'accepted' && !showOtpInline && (
+                        <button onClick={() => handleStatusUpdate(d, 'in-transit')}
+                          className="btn btn-secondary flex-1">
+                          <Navigation className="w-4 h-4" /> {t('startTransit')}
+                        </button>
+                      )}
+                      {d.deliveryStatus === 'in-transit' && !showOtpInline && (
+                        <button onClick={() => handleStatusUpdate(d, 'delivered')}
+                          className="btn btn-primary flex-1">
+                          <CheckCircle2 className="w-4 h-4" /> {t('markDelivered')}
+                        </button>
+                      )}
+                      {d.deliveryStatus === 'delivered' && (
+                        <div className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-emerald-50 text-emerald-700 font-semibold text-sm">
+                          <CheckCircle2 className="w-4 h-4" /> {t('deliveryCompleted')}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

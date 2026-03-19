@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { getRetailerOrders, getRetailerRatings, submitRating } from '../services/api';
 import OrderCard from '../components/OrderCard';
+import OrderStatusTracker from '../components/OrderStatusTracker';
+import Modal from '../components/Modal';
 import StarRating from '../components/StarRating';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, CreditCard, Star } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 export default function RetailerOrders({ user }) {
+  const [expandedOrder, setExpandedOrder] = useState(null);
   const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,7 +25,10 @@ export default function RetailerOrders({ user }) {
 
   async function loadOrders() {
     try {
+      // Fetch orders and ensure delivery OTP is available
       const data = await getRetailerOrders(user._id);
+      // If needed, fetch order details for OTP (if not present)
+      // For now, assume order.otp is present in the order object
       setOrders(data);
     } catch { /* offline */ }
     setLoading(false);
@@ -67,14 +73,15 @@ export default function RetailerOrders({ user }) {
   }
 
   const unpaidCount = orders.filter(o => o.status === 'accepted' && o.paymentStatus === 'unpaid').length;
-  const activeOrders = orders.filter(o => o.paymentStatus !== 'paid');
   const paidOrders = orders.filter(o => o.paymentStatus === 'paid');
-  
-  const displayOrders = activeTab === 'active' ? activeOrders : paidOrders;
-  const displayStats = activeTab === 'active' 
+
+  // Only show orders related to this retailer in Active tab
+  const retailerOrders = orders.filter(o => o.retailerId === user._id);
+  const displayOrders = activeTab === 'active' ? retailerOrders : paidOrders;
+  const displayStats = activeTab === 'active'
     ? [
-        { label: 'Active', value: activeOrders.length, color: 'text-blue-600' },
-        { label: 'Unpaid', value: unpaidCount, color: 'text-amber-600' }
+        { label: 'All Orders', value: retailerOrders.length, color: 'text-blue-600' },
+        { label: 'Unpaid', value: retailerOrders.filter(o => o.status === 'accepted' && o.paymentStatus === 'unpaid').length, color: 'text-amber-600' }
       ]
     : [
         { label: 'Completed', value: paidOrders.length, color: 'text-emerald-600' }
@@ -97,7 +104,7 @@ export default function RetailerOrders({ user }) {
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
-          💼 Active Orders ({activeOrders.length})
+          <ShoppingCart className="inline w-4 h-4 mr-1 -mt-1" /> Active Orders
         </button>
         <button
           onClick={() => setActiveTab('history')}
@@ -107,7 +114,7 @@ export default function RetailerOrders({ user }) {
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
-          📊 Payment History ({paidOrders.length})
+          <CreditCard className="inline w-4 h-4 mr-1 -mt-1" /> Payment History
         </button>
       </div>
 
@@ -170,58 +177,56 @@ export default function RetailerOrders({ user }) {
         <div className="grid gap-4 sm:grid-cols-2">
           {displayOrders.map((order, i) => (
             <div key={order._id} className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-              <OrderCard order={order} actions={activeTab === 'active' ? getActions(order) : null} />
-
-              {/* Rating section — only on paid orders (history tab) */}
-              {activeTab === 'history' && order.paymentStatus === 'paid' && (
-                <div className="mt-2">
-                  {ratedOrders[order._id] ? (
-                    /* Already rated — show read-only */
-                    <div className="card-static p-3 bg-amber-50/60 border-amber-100">
-                      <div className="flex items-center gap-2">
-                        <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                        <span className="text-sm font-semibold text-gray-700">{t('yourRating')}</span>
-                      </div>
-                      <StarRating value={ratedOrders[order._id].rating} totalRatings={1} compact />
-                      {ratedOrders[order._id].comment && (
-                        <p className="text-xs text-gray-500 mt-1.5 italic">"{ratedOrders[order._id].comment}"</p>
-                      )}
-                    </div>
-                  ) : ratingOpen === order._id ? (
-                    /* Rating form open */
-                    <div className="card-static p-4 border-2 border-amber-200 bg-amber-50/30">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
-                          <Star className="w-4 h-4 text-amber-500" /> {t('rateFarmer')}
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={() => setRatingOpen(null)}
-                          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                      <StarRating
-                        editable
-                        loading={ratingLoading}
-                        onSubmit={(data) => handleSubmitRating(order, data)}
-                      />
-                    </div>
-                  ) : (
-                    /* Rate button */
-                    <button
-                      type="button"
-                      onClick={() => setRatingOpen(order._id)}
-                      className="btn btn-outline w-full text-sm py-2.5 flex items-center justify-center gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
-                    >
-                      <Star className="w-4 h-4" /> {t('rateFarmer')}
-                    </button>
-                  )}
-                </div>
-              )}
+              <div
+                className="cursor-pointer"
+                onClick={() => activeTab === 'active' ? setExpandedOrder(order._id) : null}
+              >
+                <OrderCard
+                  order={order}
+                  actions={activeTab === 'active' ? getActions(order) : null}
+                  showOtp={activeTab === 'active'}
+                  deliveryOtp={order.otp}
+                  rating={activeTab === 'active' && order.paymentStatus === 'paid' && order.status === 'delivered'}
+                  rated={ratedOrders[order._id]}
+                  ratingOpen={ratingOpen === order._id}
+                  onOpenRating={() => setRatingOpen(order._id)}
+                  onCloseRating={() => setRatingOpen(null)}
+                  onSubmitRating={(data) => handleSubmitRating(order, data)}
+                  ratingLoading={ratingLoading}
+                  t={t}
+                />
+              </div>
             </div>
           ))}
+
+          {/* Modal for order status tracker */}
+          {activeTab === 'active' && expandedOrder && (
+            <Modal open={!!expandedOrder} onClose={() => setExpandedOrder(null)}>
+              {(() => {
+                const order = displayOrders.find(o => o._id === expandedOrder);
+                if (!order) return null;
+                return (
+                  <>
+                    <OrderCard
+                      order={order}
+                      actions={getActions(order)}
+                      showOtp={true}
+                      deliveryOtp={order.otp}
+                      rating={order.paymentStatus === 'paid' && order.status === 'delivered'}
+                      rated={ratedOrders[order._id]}
+                      ratingOpen={ratingOpen === order._id}
+                      onOpenRating={() => setRatingOpen(order._id)}
+                      onCloseRating={() => setRatingOpen(null)}
+                      onSubmitRating={(data) => handleSubmitRating(order, data)}
+                      ratingLoading={ratingLoading}
+                      t={t}
+                    />
+                    <OrderStatusTracker status={order.status} />
+                  </>
+                );
+              })()}
+            </Modal>
+          )}
         </div>
       )}
     </div>

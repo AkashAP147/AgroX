@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { getFarmerOrders, updateOrderStatus } from '../services/api';
+import { getFarmerOrders, updateOrderStatus, getOrderDetails } from '../services/api';
 import OrderCard from '../components/OrderCard';
+import Modal from '../components/Modal';
+import OrderStatusTracker from '../components/OrderStatusTracker';
 import { ClipboardList, Download, Package, CreditCard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
@@ -11,14 +13,28 @@ export default function FarmerOrders({ user }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active'); // 'active' or 'history'
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const navigate = useNavigate();
+
 
   useEffect(() => { loadOrders(); }, []);
 
   async function loadOrders() {
     try {
       const data = await getFarmerOrders(user._id);
-      setOrders(data);
+      // For each order, fetch delivery info to get pickupOtp
+      const ordersWithDelivery = await Promise.all(
+        data.map(async (order) => {
+          try {
+            const details = await getOrderDetails(order._id);
+            return { ...order, pickupOtp: details.delivery?.pickupOtp };
+          } catch {
+            return order;
+          }
+        })
+      );
+      setOrders(ordersWithDelivery);
     } catch { /* offline */ }
     setLoading(false);
   }
@@ -89,14 +105,15 @@ export default function FarmerOrders({ user }) {
   }
 
   const pendingCount = orders.filter(o => o.status === 'pending').length;
-  const activeOrders = orders.filter(o => o.paymentStatus !== 'paid');
+  const allOrders = orders;
   const paymentHistory = orders.filter(o => o.paymentStatus === 'paid');
-  const activeCount = activeOrders.filter(o => o.status === 'accepted').length;
-  const displayOrders = activeTab === 'active' ? activeOrders : paymentHistory;
+  const activeCount = allOrders.filter(o => o.status === 'accepted').length;
+  const displayOrders = activeTab === 'active' ? allOrders : paymentHistory;
   const displayStats = activeTab === 'active'
     ? [
-        { label: 'Active', value: activeCount, color: 'text-emerald-600' },
-        { label: 'Pending', value: pendingCount, color: 'text-amber-600' }
+        { label: 'Total', value: allOrders.length, color: 'text-emerald-600' },
+        { label: 'Pending', value: pendingCount, color: 'text-amber-600' },
+        { label: 'Accepted', value: activeCount, color: 'text-blue-600' }
       ]
     : [
         { label: 'Received', value: paymentHistory.length, color: 'text-blue-600' }
@@ -144,7 +161,7 @@ export default function FarmerOrders({ user }) {
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
-          <Package className="inline w-4 h-4 mr-1 -mt-0.5" /> Order List ({activeOrders.length})
+          <Package className="inline w-4 h-4 mr-1 -mt-0.5" /> Order List ({allOrders.length})
         </button>
         <button
           onClick={() => setActiveTab('history')}
@@ -210,11 +227,35 @@ export default function FarmerOrders({ user }) {
         <div className="grid gap-4 sm:grid-cols-2">
           {displayOrders.map((order, i) => (
             <div key={order._id} className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-              <OrderCard order={order} actions={activeTab === 'active' ? getActions(order) : null} showOtp={false} />
+              <OrderCard 
+                order={order} 
+                actions={activeTab === 'active' ? getActions(order) : null} 
+                showOtp={true} 
+                pickupOtp={order.pickupOtp}
+                onClick={() => {
+                  setSelectedOrder(order);
+                  setModalOpen(true);
+                }}
+              />
             </div>
           ))}
         </div>
       )}
+      {/* Status Tracker Modal (unified with retailer style) */}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)}>
+        {selectedOrder && (
+          <>
+            <OrderCard
+              order={selectedOrder}
+              actions={getActions(selectedOrder)}
+              showOtp={true}
+              pickupOtp={selectedOrder.pickupOtp}
+              t={t}
+            />
+            <OrderStatusTracker status={selectedOrder.status} />
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -60,7 +60,7 @@ export const getOrderDetails = (orderId) => request(`/orders/${orderId}/details`
 export const getPendingDeliveries = () => request('/deliveries/pending');
 export const getTransporterDeliveries = (transporterId) => request(`/deliveries/transporter/${transporterId}`);
 export const acceptDelivery = (deliveryId, data) => request(`/deliveries/${deliveryId}/accept`, { method: 'PUT', body: data });
-export const updateDeliveryStatus = (deliveryId, status) => request(`/deliveries/${deliveryId}/status`, { method: 'PUT', body: { status } });
+export const updateDeliveryStatus = (deliveryId, data) => request(`/deliveries/${deliveryId}/status`, { method: 'PUT', body: data });
 
 // Ratings
 export const submitRating = (data) => request('/ratings', { method: 'POST', body: data });
