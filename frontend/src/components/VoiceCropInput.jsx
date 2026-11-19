@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Mic, X, Upload, MapPin, Loader2, Check, Volume2, Settings } from 'lucide-react';
+import { addCrop } from '../services/api';
 
 const LANGUAGES = [
   { code: 'en-IN', name: 'English (India)', flag: '🇮🇳' },
@@ -167,28 +168,20 @@ export default function VoiceCropInput({ user, onCropAdded, className = '', butt
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('farmerId', user._id);
-      formData.append('cropName', cropData.cropName);
-      formData.append('quantity', parseFloat(cropData.quantity));
-      formData.append('quantityUnit', 'kg');
-      formData.append('price', parseFloat(cropData.price));
-      formData.append('location', cropData.location || user.location);
-      formData.append('farmerName', user.name);
-      
-      if (cropData.image) {
-        formData.append('image', cropData.image);
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/crops/create`, {
-        method: 'POST',
-        body: formData
+      await addCrop({
+        farmerId: user._id,
+        cropName: cropData.cropName,
+        quantity: parseFloat(cropData.quantity),
+        quantityUnit: 'kg',
+        price: parseFloat(cropData.price),
+        location: cropData.location || user.location,
+        farmerName: user.name,
+        availableUntil: cropData.availableUntil || new Date(Date.now() + 7 * 86400000).toISOString(),
+        image: cropData.image || null,
+        coordinates: cropData.coordinates || null
       });
-
-      if (!response.ok) throw new Error('Failed to add crop');
-      
-      const result = await response.json();
       setMessage('Crop added successfully!');
+      if (onCropAdded) onCropAdded();
       
       // Reset
       setTranscript('');
