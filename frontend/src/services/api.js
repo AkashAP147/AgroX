@@ -25,6 +25,21 @@ function haversineDistanceKm(a, b) {
   return R * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
 }
 
+// Helper to remove any undefined properties so Firebase RTDB never throws
+function sanitizeData(obj) {
+  if (obj === undefined) return null;
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeData);
+  const clean = {};
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val !== undefined) {
+      clean[key] = typeof val === 'object' && val !== null ? sanitizeData(val) : val;
+    }
+  }
+  return clean;
+}
+
 // ----------------------------------------------------
 // AUTHENTICATION & USERS
 // ----------------------------------------------------
@@ -56,7 +71,7 @@ export async function googleRegister(data) {
     createdAt: new Date().toISOString()
   };
 
-  await set(ref(db, `users/${uid}`), userObj);
+  await set(ref(db, `users/${uid}`), sanitizeData(userObj));
   return { message: 'Registered with Google', user: userObj, role: userObj.role };
 }
 
@@ -115,7 +130,7 @@ async function registerUserWithRole(data, role) {
     createdAt: new Date().toISOString()
   };
 
-  await set(ref(db, `users/${id}`), userObj);
+  await set(ref(db, `users/${id}`), sanitizeData(userObj));
   return { message: `${role} registered`, user: userObj, role };
 }
 
@@ -156,21 +171,21 @@ export async function login(data) {
 }
 
 export async function updateFarmerProfile(id, data) {
-  await update(ref(db, `users/${id}`), data);
+  await update(ref(db, `users/${id}`), sanitizeData(data));
   const snap = await get(ref(db, `users/${id}`));
   const user = { _id: id, id, ...snap.val() };
   return { message: 'Profile updated', user };
 }
 
 export async function updateTransporterProfile(id, data) {
-  await update(ref(db, `users/${id}`), data);
+  await update(ref(db, `users/${id}`), sanitizeData(data));
   const snap = await get(ref(db, `users/${id}`));
   const user = { _id: id, id, ...snap.val() };
   return { message: 'Profile updated', user };
 }
 
 export async function updateRetailerProfile(id, data) {
-  await update(ref(db, `users/${id}`), data);
+  await update(ref(db, `users/${id}`), sanitizeData(data));
   const snap = await get(ref(db, `users/${id}`));
   const user = { _id: id, id, ...snap.val() };
   return { message: 'Profile updated', user };
@@ -198,7 +213,7 @@ export async function addCrop(data) {
     status: 'available',
     createdAt: new Date().toISOString()
   };
-  await set(ref(db, `crops/${cropId}`), crop);
+  await set(ref(db, `crops/${cropId}`), sanitizeData(crop));
   return { message: 'Crop added', crop };
 }
 
@@ -216,7 +231,7 @@ export async function deleteCrop(cropId) {
 }
 
 export async function updateCrop(cropId, data) {
-  await update(ref(db, `crops/${cropId}`), data);
+  await update(ref(db, `crops/${cropId}`), sanitizeData(data));
   const snap = await get(ref(db, `crops/${cropId}`));
   return { message: 'Crop updated', crop: { _id: cropId, id: cropId, ...snap.val() } };
 }
@@ -322,12 +337,12 @@ export async function createOrder(data) {
   };
 
   const newQty = Math.max(0, (crop.quantity || 0) - Number(quantity));
-  await update(ref(db, `crops/${cropId}`), {
+  await update(ref(db, `crops/${cropId}`), sanitizeData({
     quantity: newQty,
     status: newQty <= 0 ? 'sold' : 'available'
-  });
+  }));
 
-  await set(ref(db, `orders/${orderId}`), order);
+  await set(ref(db, `orders/${orderId}`), sanitizeData(order));
 
   const deliveryId = push(ref(db, 'deliveries')).key;
   const delivery = {
@@ -343,7 +358,7 @@ export async function createOrder(data) {
     deliveryStatus: 'pending',
     createdAt: new Date().toISOString()
   };
-  await set(ref(db, `deliveries/${deliveryId}`), delivery);
+  await set(ref(db, `deliveries/${deliveryId}`), sanitizeData(delivery));
 
   return { message: 'Order created', order };
 }
@@ -363,21 +378,21 @@ export async function getRetailerOrders(retailerId) {
 }
 
 export async function updateOrderStatus(orderId, status) {
-  await update(ref(db, `orders/${orderId}`), { status });
+  await update(ref(db, `orders/${orderId}`), sanitizeData({ status }));
 
   if (status === 'delivered') {
     const deliveriesSnap = await get(ref(db, 'deliveries'));
     const deliveries = snapshotToArray(deliveriesSnap);
     const del = deliveries.find(d => d.orderId === orderId);
     if (del) {
-      await update(ref(db, `deliveries/${del._id}`), { deliveryStatus: 'delivered' });
+      await update(ref(db, `deliveries/${del._id}`), sanitizeData({ deliveryStatus: 'delivered' }));
     }
   }
   return { message: 'Order status updated' };
 }
 
 export async function payOrder(orderId, upiId) {
-  await update(ref(db, `orders/${orderId}`), { paymentStatus: 'completed', upiId });
+  await update(ref(db, `orders/${orderId}`), sanitizeData({ paymentStatus: 'completed', upiId }));
   return { message: 'Payment recorded' };
 }
 
@@ -393,11 +408,11 @@ export async function verifyDeliveryOtp(orderId, otp) {
   const order = snap.val();
   if (order.otp !== String(otp)) throw new Error('Invalid OTP');
 
-  await update(ref(db, `orders/${orderId}`), { status: 'delivered' });
+  await update(ref(db, `orders/${orderId}`), sanitizeData({ status: 'delivered' }));
   const deliveriesSnap = await get(ref(db, 'deliveries'));
   const del = snapshotToArray(deliveriesSnap).find(d => d.orderId === orderId);
   if (del) {
-    await update(ref(db, `deliveries/${del._id}`), { deliveryStatus: 'delivered' });
+    await update(ref(db, `deliveries/${del._id}`), sanitizeData({ deliveryStatus: 'delivered' }));
   }
   return { message: 'Delivery confirmed', order: { _id: orderId, id: orderId, ...order, status: 'delivered' } };
 }
@@ -421,27 +436,27 @@ export async function getTransporterDeliveries(transporterId) {
 }
 
 export async function acceptDelivery(deliveryId, data) {
-  await update(ref(db, `deliveries/${deliveryId}`), {
+  await update(ref(db, `deliveries/${deliveryId}`), sanitizeData({
     transporterId: data.transporterId,
     transporterName: data.transporterName,
     deliveryStatus: 'accepted'
-  });
+  }));
   const delSnap = await get(ref(db, `deliveries/${deliveryId}`));
   if (delSnap.exists() && delSnap.val().orderId) {
-    await update(ref(db, `orders/${delSnap.val().orderId}`), { status: 'in_transit' });
+    await update(ref(db, `orders/${delSnap.val().orderId}`), sanitizeData({ status: 'in_transit' }));
   }
   return { message: 'Delivery accepted' };
 }
 
 export async function updateDeliveryStatus(deliveryId, data) {
-  await update(ref(db, `deliveries/${deliveryId}`), {
+  await update(ref(db, `deliveries/${deliveryId}`), sanitizeData({
     deliveryStatus: data.status,
     ...(data.location ? { transporterLocation: data.location } : {})
-  });
+  }));
   if (data.status === 'delivered') {
     const delSnap = await get(ref(db, `deliveries/${deliveryId}`));
     if (delSnap.exists() && delSnap.val().orderId) {
-      await update(ref(db, `orders/${delSnap.val().orderId}`), { status: 'delivered' });
+      await update(ref(db, `orders/${delSnap.val().orderId}`), sanitizeData({ status: 'delivered' }));
     }
   }
   return { message: 'Delivery status updated' };
@@ -459,7 +474,7 @@ export async function submitRating(data) {
     ...data,
     createdAt: new Date().toISOString()
   };
-  await set(ref(db, `ratings/${ratingId}`), rating);
+  await set(ref(db, `ratings/${ratingId}`), sanitizeData(rating));
   return { message: 'Rating submitted', rating };
 }
 

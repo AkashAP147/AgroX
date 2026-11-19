@@ -76,7 +76,7 @@ export default function FarmerDashboard({ user, onUpdateUser }) {
     }
     setPhoneLoading(true);
     try {
-      const res = await updateFarmerProfile(user._id, { upiId: user.upiId, upiQr: user.upiQr, phone: phoneInput });
+      const res = await updateFarmerProfile(user._id, { phone: phoneInput, upiId: user.upiId || '', upiQr: user.upiQr || '' });
       if (onUpdateUser) onUpdateUser(res.user);
       setShowPhoneModal(false);
       localStorage.setItem(`phoneModalDismissed_${user._id}`, '1'); // Persist dismissal
