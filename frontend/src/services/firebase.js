@@ -6,7 +6,7 @@ import { getDatabase } from 'firebase/database';
 const firebaseConfig = {
   apiKey: "AIzaSyCmb8Ym6EIakG9Qv82x4im8GYZSWT4QQCw",
   authDomain: "mandi-connect-1fba7.firebaseapp.com",
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://mandi-connect-1fba7-default-rtdb.firebaseio.com",
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://mandi-connect-1fba7-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "mandi-connect-1fba7",
   storageBucket: "mandi-connect-1fba7.firebasestorage.app",
   messagingSenderId: "698192581639",

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { login as loginAPI, googleLogin } from '../services/api';
+import { login as loginAPI, googleLogin, googleRegister } from '../services/api';
 import { auth, RecaptchaVerifier, signInWithPhoneNumber, GoogleAuthProvider, signInWithPopup } from '../services/firebase';
-import { Wheat, Tractor, Store, Truck, Loader2, ShieldCheck, ArrowLeft, KeyRound } from 'lucide-react';
+import { Wheat, Tractor, Store, Truck, Loader2, ShieldCheck, ArrowLeft, KeyRound, X, LocateFixed, MapPin } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 const ROLE_IDS = [
@@ -11,6 +11,12 @@ const ROLE_IDS = [
   { id: 'transporter', Icon: Truck, key: 'transporter' }
 ];
 
+const VEHICLES = [
+  { value: 'truck', label: 'Truck', Icon: Truck },
+  { value: 'mini-truck', label: 'Mini Truck', Icon: Truck },
+  { value: 'tempo', label: 'Tempo', Icon: Truck },
+  { value: 'auto', label: 'Auto', Icon: Truck }
+];
 
 export default function Login({ onLogin }) {
   const [method, setMethod] = useState('email'); // 'email', 'google', or 'otp'
@@ -24,6 +30,15 @@ export default function Login({ onLogin }) {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [resendTimer, setResendTimer] = useState(0);
   const [confirmationResult, setConfirmationResult] = useState(null);
+  const [googleModal, setGoogleModal] = useState({
+    open: false,
+    user: null,
+    name: '',
+    role: 'farmer',
+    vehicleType: 'truck',
+    location: '',
+    locating: false
+  });
   const otpRefs = [useRef(), useRef(), useRef(), useRef(), useRef(), useRef()];
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -58,17 +73,81 @@ export default function Login({ onLogin }) {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      // Call backend to get user and role
-      const res = await googleLogin({ uid: user.uid, email: user.email });
+
+      try {
+        const res = await googleLogin({ uid: user.uid, email: user.email });
+        onLogin(res.user);
+        if (res.role === 'farmer') navigate('/farmer');
+        else if (res.role === 'retailer') navigate('/marketplace');
+        else navigate('/transporter');
+        return;
+      } catch {
+        // Not registered yet, prompt to choose account type
+        setGoogleModal({
+          open: true,
+          user,
+          name: user.displayName || '',
+          role: 'farmer',
+          vehicleType: 'truck',
+          location: '',
+          locating: false
+        });
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCompleteGoogleRegister(e) {
+    if (e) e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const { user, name: gName, role: gRole, vehicleType: gVeh, location: gLoc } = googleModal;
+      const regData = {
+        name: gName || user.displayName || 'User',
+        email: user.email,
+        uid: user.uid,
+        photoURL: user.photoURL,
+        role: gRole,
+        location: gLoc || '',
+        vehicleType: gRole === 'transporter' ? gVeh : undefined
+      };
+      const res = await googleRegister(regData);
+      setGoogleModal({ open: false, user: null, name: '', role: 'farmer', vehicleType: 'truck', location: '', locating: false });
       onLogin(res.user);
-      if (res.role === 'farmer') navigate('/farmer');
-      else if (res.role === 'retailer') navigate('/marketplace');
+      if (gRole === 'farmer') navigate('/farmer');
+      else if (gRole === 'retailer') navigate('/marketplace');
       else navigate('/transporter');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  function detectGoogleLocation() {
+    if (!navigator.geolocation) return;
+    setGoogleModal(prev => ({ ...prev, locating: true }));
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&zoom=14`,
+            { headers: { 'Accept-Language': 'en' } }
+          );
+          const data = await res.json();
+          const place = data.address?.city || data.address?.town || data.address?.village || `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+          setGoogleModal(prev => ({ ...prev, location: place, locating: false }));
+        } catch {
+          setGoogleModal(prev => ({ ...prev, locating: false }));
+        }
+      },
+      () => setGoogleModal(prev => ({ ...prev, locating: false })),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
   }
 
   // ...existing code for OTP, resend, and UI...
@@ -378,6 +457,125 @@ export default function Login({ onLogin }) {
           )
         )}
       </div>
+
+      {/* Google Sign Up Modal (Mode/Role Selection & Optional Location) */}
+      {googleModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md border border-gray-100 animate-scale-in">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xl font-bold text-gray-900">Select Account Type</h2>
+              <button
+                type="button"
+                onClick={() => setGoogleModal(prev => ({ ...prev, open: false }))}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-5">
+              Welcome, <span className="font-semibold text-gray-900">{googleModal.name}</span>! Choose how you will use AgroX:
+            </p>
+
+            <form onSubmit={handleCompleteGoogleRegister} className="space-y-5">
+              {/* Role selection */}
+              <div>
+                <label className="label">{t('iAmA')}</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {ROLE_IDS.map(r => (
+                    <button
+                      type="button"
+                      key={r.id}
+                      onClick={() => setGoogleModal(prev => ({ ...prev, role: r.id }))}
+                      className={`chip flex flex-col items-center gap-1.5 py-3 transition-all ${
+                        googleModal.role === r.id ? 'chip-active shadow-sm' : 'chip-inactive'
+                      }`}
+                    >
+                      <r.Icon className="w-5 h-5" />
+                      <span className="text-xs font-medium">{t(r.key)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Transporter vehicle selection */}
+              {googleModal.role === 'transporter' && (
+                <div className="animate-scale-in">
+                  <label className="label">{t('vehicleType')}</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {VEHICLES.map(v => (
+                      <button
+                        type="button"
+                        key={v.value}
+                        onClick={() => setGoogleModal(prev => ({ ...prev, vehicleType: v.value }))}
+                        className={`chip text-sm py-2 flex items-center justify-center gap-2 ${
+                          googleModal.vehicleType === v.value ? 'chip-active' : 'chip-inactive'
+                        }`}
+                      >
+                        <v.Icon className="w-4 h-4" /> {v.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Optional Location */}
+              <div>
+                <label className="label">
+                  {t('location')} <span className="text-gray-400 font-normal">({t('optional') || 'Optional'})</span>
+                </label>
+                <input
+                  className="input"
+                  placeholder={t('villageCityPlaceholder')}
+                  value={googleModal.location}
+                  onChange={e => setGoogleModal(prev => ({ ...prev, location: e.target.value }))}
+                />
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={detectGoogleLocation}
+                    disabled={googleModal.locating}
+                    className="btn btn-secondary text-xs py-1.5 px-3"
+                  >
+                    {googleModal.locating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LocateFixed className="w-3.5 h-3.5" />}
+                    {t('detectViaGPS')}
+                  </button>
+                  <span className="text-xs text-gray-400">Can be updated anytime</span>
+                </div>
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm animate-scale-in">
+                  <span className="flex-shrink-0">⚠</span> {error}
+                </div>
+              )}
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setGoogleModal(prev => ({ ...prev, open: false }))}
+                  className="btn btn-outline flex-1 py-3"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn btn-primary flex-1 py-3"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Creating...
+                    </span>
+                  ) : (
+                    'Get Started'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

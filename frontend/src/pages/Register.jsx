@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { registerFarmer, registerRetailer, registerTransporter, googleRegister } from '../services/api';
+import { registerFarmer, registerRetailer, registerTransporter, googleRegister, googleLogin } from '../services/api';
 import { auth, RecaptchaVerifier, signInWithPhoneNumber, GoogleAuthProvider, signInWithPopup } from '../services/firebase';
-import { UserPlus, Tractor, Store, Truck, Loader2, ShieldCheck, ArrowLeft, KeyRound, LocateFixed, MapPin } from 'lucide-react';
+import { UserPlus, Tractor, Store, Truck, Loader2, ShieldCheck, ArrowLeft, KeyRound, LocateFixed, MapPin, X, Check } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 const ROLE_IDS = [
@@ -20,60 +20,40 @@ const VEHICLES = [
 
 export default function Register({ onLogin }) {
   const [method, setMethod] = useState('email'); // 'email', 'google', or 'otp'
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    // Email/password registration handler
-    async function handleEmailRegister(e) {
-      e.preventDefault();
-      setError('');
-      setLoading(true);
-      try {
-        if (!email || !password) throw new Error('Email and password are required');
-        if (!location) throw new Error('Location is required');
-        // Firebase email registration
-        const { createUserWithEmailAndPassword, updateProfile } = await import('firebase/auth');
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-        await updateProfile(user, { displayName: name });
-        // Prepare registration data
-        const regData = {
-          name,
-          email,
-          uid: user.uid,
-          role,
-          location,
-          vehicleType: role === 'transporter' ? vehicleType : undefined
-        };
-        const res = await registerFns[role](regData);
-        onLogin(res.user);
-        if (role === 'farmer') navigate('/farmer');
-        else if (role === 'retailer') navigate('/marketplace');
-        else navigate('/transporter');
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
-  async function handleGoogleRegister() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [googleModal, setGoogleModal] = useState({
+    open: false,
+    user: null,
+    name: '',
+    role: 'farmer',
+    vehicleType: 'truck',
+    location: '',
+    locating: false
+  });
+
+  // Email/password registration handler
+  async function handleEmailRegister(e) {
+    e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      // Prepare registration data
+      if (!email || !password) throw new Error('Email and password are required');
+      // Firebase email registration
+      const { createUserWithEmailAndPassword, updateProfile } = await import('firebase/auth');
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      await updateProfile(user, { displayName: name });
+      // Prepare registration data (location is optional)
       const regData = {
-        name: user.displayName,
-        email: user.email,
+        name: name || email.split('@')[0],
+        email,
         uid: user.uid,
-        photoURL: user.photoURL,
         role,
-        location,
+        location: location || '',
         vehicleType: role === 'transporter' ? vehicleType : undefined
       };
-      if (!location) throw new Error('Location is required');
-      const res = await googleRegister(regData);
+      const res = await registerFns[role](regData);
       onLogin(res.user);
       if (role === 'farmer') navigate('/farmer');
       else if (role === 'retailer') navigate('/marketplace');
@@ -83,6 +63,87 @@ export default function Register({ onLogin }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleGoogleRegister() {
+    setError('');
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Check if user is already registered - if so, log them straight in
+      try {
+        const existing = await googleLogin({ uid: user.uid, email: user.email });
+        if (existing?.user) {
+          onLogin(existing.user);
+          if (existing.role === 'farmer') navigate('/farmer');
+          else if (existing.role === 'retailer') navigate('/marketplace');
+          else navigate('/transporter');
+          return;
+        }
+      } catch {
+        // Not registered yet, prompt for mode of user (role) & optional location
+      }
+
+      setGoogleModal({
+        open: true,
+        user,
+        name: user.displayName || '',
+        role: role || 'farmer',
+        vehicleType: 'truck',
+        location: location || '',
+        locating: false
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCompleteGoogleRegister(e) {
+    if (e) e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const { user, name: gName, role: gRole, vehicleType: gVeh, location: gLoc } = googleModal;
+      const regData = {
+        name: gName || user.displayName || 'User',
+        email: user.email,
+        uid: user.uid,
+        photoURL: user.photoURL,
+        role: gRole,
+        location: gLoc || '',
+        vehicleType: gRole === 'transporter' ? gVeh : undefined
+      };
+      const res = await googleRegister(regData);
+      setGoogleModal({ open: false, user: null, name: '', role: 'farmer', vehicleType: 'truck', location: '', locating: false });
+      onLogin(res.user);
+      if (gRole === 'farmer') navigate('/farmer');
+      else if (gRole === 'retailer') navigate('/marketplace');
+      else navigate('/transporter');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function detectGoogleLocation() {
+    if (!navigator.geolocation) return;
+    setGoogleModal(prev => ({ ...prev, locating: true }));
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const place = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+        setGoogleModal(prev => ({ ...prev, location: place, locating: false }));
+      },
+      () => {
+        setGoogleModal(prev => ({ ...prev, locating: false }));
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
   }
   const { t } = useLanguage();
   const [role, setRole] = useState('farmer');
@@ -310,11 +371,13 @@ export default function Register({ onLogin }) {
               <input type="password" className="input" placeholder="Enter password"
                 value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
-            {/* Location */}
+            {/* Location (Optional) */}
             <div>
-              <label className="label">{t('location')}</label>
+              <label className="label">
+                {t('location')} <span className="text-gray-400 font-normal">({t('optional') || 'Optional'})</span>
+              </label>
               <input className="input" placeholder={t('villageCityPlaceholder')}
-                value={location} onChange={e => setLocation(e.target.value)} required />
+                value={location} onChange={e => setLocation(e.target.value)} />
               <div className="mt-2 flex items-center justify-between gap-3">
                 <button
                   type="button"
@@ -415,9 +478,11 @@ export default function Register({ onLogin }) {
             </div>
 
             <div>
-              <label className="label">{t('location')}</label>
+              <label className="label">
+                {t('location')} <span className="text-gray-400 font-normal">({t('optional') || 'Optional'})</span>
+              </label>
               <input className="input" placeholder={t('villageCityPlaceholder')}
-                value={location} onChange={e => setLocation(e.target.value)} required />
+                value={location} onChange={e => setLocation(e.target.value)} />
               <div className="mt-2 flex items-center justify-between gap-3">
                 <button
                   type="button"
@@ -544,6 +609,125 @@ export default function Register({ onLogin }) {
           </form>
         )}
       </div>
+
+      {/* Google Sign Up Modal (Mode/Role Selection & Optional Location) */}
+      {googleModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md border border-gray-100 animate-scale-in">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xl font-bold text-gray-900">Select Account Type</h2>
+              <button
+                type="button"
+                onClick={() => setGoogleModal(prev => ({ ...prev, open: false }))}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-5">
+              Welcome, <span className="font-semibold text-gray-900">{googleModal.name}</span>! Choose how you will use AgroX:
+            </p>
+
+            <form onSubmit={handleCompleteGoogleRegister} className="space-y-5">
+              {/* Role selection */}
+              <div>
+                <label className="label">{t('iAmA')}</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {ROLE_IDS.map(r => (
+                    <button
+                      type="button"
+                      key={r.id}
+                      onClick={() => setGoogleModal(prev => ({ ...prev, role: r.id }))}
+                      className={`chip flex flex-col items-center gap-1.5 py-3 transition-all ${
+                        googleModal.role === r.id ? 'chip-active shadow-sm' : 'chip-inactive'
+                      }`}
+                    >
+                      <r.Icon className="w-5 h-5" />
+                      <span className="text-xs font-medium">{t(r.key)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Transporter vehicle selection */}
+              {googleModal.role === 'transporter' && (
+                <div className="animate-scale-in">
+                  <label className="label">{t('vehicleType')}</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {VEHICLES.map(v => (
+                      <button
+                        type="button"
+                        key={v.value}
+                        onClick={() => setGoogleModal(prev => ({ ...prev, vehicleType: v.value }))}
+                        className={`chip text-sm py-2 flex items-center justify-center gap-2 ${
+                          googleModal.vehicleType === v.value ? 'chip-active' : 'chip-inactive'
+                        }`}
+                      >
+                        <v.Icon className="w-4 h-4" /> {v.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Optional Location */}
+              <div>
+                <label className="label">
+                  {t('location')} <span className="text-gray-400 font-normal">({t('optional') || 'Optional'})</span>
+                </label>
+                <input
+                  className="input"
+                  placeholder={t('villageCityPlaceholder')}
+                  value={googleModal.location}
+                  onChange={e => setGoogleModal(prev => ({ ...prev, location: e.target.value }))}
+                />
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={detectGoogleLocation}
+                    disabled={googleModal.locating}
+                    className="btn btn-secondary text-xs py-1.5 px-3"
+                  >
+                    {googleModal.locating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LocateFixed className="w-3.5 h-3.5" />}
+                    {t('detectViaGPS')}
+                  </button>
+                  <span className="text-xs text-gray-400">Can be updated anytime</span>
+                </div>
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm animate-scale-in">
+                  <span className="flex-shrink-0">⚠</span> {error}
+                </div>
+              )}
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setGoogleModal(prev => ({ ...prev, open: false }))}
+                  className="btn btn-outline flex-1 py-3"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn btn-primary flex-1 py-3"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Creating...
+                    </span>
+                  ) : (
+                    'Get Started'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
